@@ -1,6 +1,7 @@
 // Mechanics Formula Library Scene for PhysicsLab
 import { Colors, Renderer } from '../../engine/renderer.js';
 import { Button } from '../../engine/ui.js';
+import { TextEngine } from '../../engine/textEngine.js';
 import { FORMULA_CATEGORIES, FORMULA_LIBRARY } from '../../physics/mechanics/formulaLibraryData.js';
 
 export class FormulaLibraryScene {
@@ -9,6 +10,7 @@ export class FormulaLibraryScene {
     this.categoryButtons = [];
     this.selectedCategory = 'ALL';
     this.scrollOffset = 0;
+    this.maxScroll = 0;
     this.lastWidth = 0;
     this.lastHeight = 0;
   }
@@ -22,37 +24,75 @@ export class FormulaLibraryScene {
     this.buttons = [];
     this.categoryButtons = [];
 
+    const isSmall = width < 720;
+    const navW = isSmall ? 130 : 160;
+    const navH = 36;
+
     // Back button
     this.buttons.push(new Button({
-      x: 20,
-      y: 16,
-      width: 150,
-      height: 38,
-      text: '← MECHANICS LAB',
+      x: 16,
+      y: 12,
+      width: navW,
+      height: navH,
+      text: '← LAB MENU',
       accentColor: Colors.purple,
       callback: () => {
         import('./mechanicsMenuScene.js').then(m => this.sceneManager.changeScene(new m.MechanicsMenuScene()));
       }
     }));
 
-    // Category Filter Buttons
-    const catY = 70;
-    const catH = 32;
-    const gap = 8;
-    let catX = 20;
+    // Scroll buttons
+    const scrollW = isSmall ? 65 : 75;
+    this.buttons.push(new Button({
+      x: width - (scrollW * 2 + 24),
+      y: 12,
+      width: scrollW,
+      height: navH,
+      text: '▲ UP',
+      accentColor: Colors.cyan,
+      callback: () => {
+        this.scrollOffset = Math.max(0, this.scrollOffset - 160);
+      }
+    }));
 
+    this.buttons.push(new Button({
+      x: width - (scrollW + 16),
+      y: 12,
+      width: scrollW,
+      height: navH,
+      text: '▼ DOWN',
+      accentColor: Colors.cyan,
+      callback: () => {
+        this.scrollOffset = Math.min(this.maxScroll, this.scrollOffset + 160);
+      }
+    }));
+
+    // Category Filter Buttons (responsive wrapping)
     const visibleCats = [
       'ALL', 'KINEMATICS', 'VECTORS', 'NEWTONS_LAWS', 'FRICTION',
       'CIRCULAR_MOTION', 'WORK_ENERGY_POWER', 'ROTATION', 'GRAVITATION', 'OSCILLATIONS_SHM', 'WAVES'
     ];
 
+    const catH = 28;
+    const catGap = 6;
+    let catX = 16;
+    let catY = 56;
+    const maxRowW = width - 32;
+
     for (const cat of visibleCats) {
       const isSel = this.selectedCategory === cat;
       const formattedName = cat.replace(/_/g, ' ');
+      const btnW = Math.min(130, Math.max(70, formattedName.length * 8 + 18));
+
+      if (catX + btnW > maxRowW && catX > 16) {
+        catX = 16;
+        catY += catH + catGap;
+      }
+
       const catBtn = new Button({
         x: catX,
         y: catY,
-        width: 110,
+        width: btnW,
         height: catH,
         text: formattedName,
         accentColor: isSel ? Colors.cyan : Colors.panelBorder,
@@ -63,33 +103,10 @@ export class FormulaLibraryScene {
         }
       });
       this.categoryButtons.push(catBtn);
-      catX += 110 + gap;
+      catX += btnW + catGap;
     }
 
-    // Scroll buttons
-    this.buttons.push(new Button({
-      x: width - 180,
-      y: 16,
-      width: 70,
-      height: 38,
-      text: '▲ UP',
-      accentColor: Colors.cyan,
-      callback: () => {
-        this.scrollOffset = Math.max(0, this.scrollOffset - 180);
-      }
-    }));
-
-    this.buttons.push(new Button({
-      x: width - 100,
-      y: 16,
-      width: 80,
-      height: 38,
-      text: '▼ DOWN',
-      accentColor: Colors.cyan,
-      callback: () => {
-        this.scrollOffset += 180;
-      }
-    }));
+    this.categoriesBottomY = catY + catH + 12;
   }
 
   handleInput(inputManager) {
@@ -98,6 +115,13 @@ export class FormulaLibraryScene {
       this.lastWidth = width;
       this.lastHeight = height;
       this.rebuildUI();
+    }
+
+    if (inputManager && inputManager.getWheelDelta) {
+      const wheel = inputManager.getWheelDelta();
+      if (wheel !== 0) {
+        this.scrollOffset = Math.max(0, Math.min(this.maxScroll, this.scrollOffset + wheel * 0.7));
+      }
     }
   }
 
@@ -116,15 +140,17 @@ export class FormulaLibraryScene {
     Renderer.drawRect(ctx, 0, 0, width, height, { fill: Colors.background });
     Renderer.drawGrid(ctx, width, height, 40);
 
-    // Title
-    Renderer.drawText(ctx, 'MECHANICS FORMULA LIBRARY', width / 2, 28, {
-      fill: Colors.cyan,
-      font: '900 22px "Segoe UI", Roboto, sans-serif',
-      align: 'center',
-      baseline: 'middle',
-      glowColor: Colors.cyan,
-      glowBlur: 10
-    });
+    // Title (hidden on small screens to avoid header crowding)
+    if (width >= 720) {
+      Renderer.drawText(ctx, 'MECHANICS FORMULA DIRECTORY', width / 2, 28, {
+        fill: Colors.cyan,
+        font: '900 18px "Segoe UI", Roboto, sans-serif',
+        align: 'center',
+        baseline: 'middle',
+        glowColor: Colors.cyan,
+        glowBlur: 8
+      });
+    }
 
     for (const btn of this.buttons) {
       btn.render(ctx);
@@ -138,14 +164,16 @@ export class FormulaLibraryScene {
       ? FORMULA_LIBRARY
       : FORMULA_LIBRARY.filter(f => f.category === this.selectedCategory);
 
-    const listY = 120;
-    const listH = height - listY - 20;
-    const itemH = 110;
-    const listW = width - 40;
+    const listY = (this.categoriesBottomY || 100);
+    const listH = Math.max(80, height - listY - 16);
+    const listW = width - 32;
+    const itemH = 118;
+    const totalContentH = formulas.length * itemH;
+    this.maxScroll = Math.max(0, totalContentH - listH + 40);
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(20, listY, listW, listH);
+    ctx.rect(16, listY, listW, listH);
     ctx.clip();
 
     let curY = listY - this.scrollOffset;
@@ -153,46 +181,55 @@ export class FormulaLibraryScene {
     for (const item of formulas) {
       if (curY + itemH >= listY && curY <= listY + listH) {
         // Formula Card
-        Renderer.drawPanel(ctx, 20, curY, listW, itemH - 12, {
+        Renderer.drawPanel(ctx, 16, curY, listW, itemH - 10, {
           fill: '#0E1522',
           stroke: Colors.panelBorder,
           radius: 8
         });
 
         // Category Tag
-        Renderer.drawRoundedRect(ctx, 36, curY + 12, 130, 20, 4, {
+        const catTagW = Math.min(130, item.category.length * 7 + 16);
+        Renderer.drawRoundedRect(ctx, 28, curY + 10, catTagW, 18, 4, {
           fill: 'rgba(94, 231, 255, 0.12)',
           stroke: 'rgba(94, 231, 255, 0.3)'
         });
-        Renderer.drawText(ctx, item.category.replace(/_/g, ' '), 101, curY + 22, {
+        Renderer.drawText(ctx, item.category.replace(/_/g, ' '), 28 + catTagW / 2, curY + 19, {
           fill: Colors.cyan,
-          font: 'bold 10px "Segoe UI", Roboto, sans-serif',
+          font: 'bold 9px "Segoe UI", Roboto, sans-serif',
           align: 'center',
           baseline: 'middle'
         });
 
         // Name
-        Renderer.drawText(ctx, item.name, 180, curY + 22, {
+        Renderer.drawText(ctx, item.name, 36 + catTagW, curY + 19, {
           fill: Colors.text,
-          font: 'bold 14px "Segoe UI", Roboto, sans-serif',
+          font: 'bold 13px "Segoe UI", Roboto, sans-serif',
           baseline: 'middle'
         });
 
         // Formula Equation Box
-        Renderer.drawRoundedRect(ctx, 36, curY + 38, listW - 72, 34, 6, {
+        const eqBoxW = Math.max(100, listW - 24);
+        Renderer.drawRoundedRect(ctx, 28, curY + 34, eqBoxW, 34, 6, {
           fill: '#070B14',
           stroke: 'rgba(250, 204, 21, 0.3)'
         });
-        Renderer.drawText(ctx, item.formula, 48, curY + 55, {
+
+        // Equation text with fitting
+        const eqFontSize = TextEngine.fitFontSize(ctx, item.formula, eqBoxW - 24, 15, 11, 'monospace', 'bold');
+        Renderer.drawText(ctx, item.formula, 40, curY + 51, {
           fill: Colors.yellow,
-          font: 'bold 15px "Courier New", monospace',
+          font: `bold ${eqFontSize}px "Courier New", monospace`,
           baseline: 'middle'
         });
 
-        // Variables & Description
-        Renderer.drawText(ctx, `${item.description}  |  ${item.variables}`, 36, curY + 84, {
+        // Variables & Description with wrapping
+        const descText = `${item.description}  •  ${item.variables}`;
+        TextEngine.drawWrappedText(ctx, descText, 28, curY + 76, listW - 32, {
           fill: Colors.textMuted,
-          font: '11px "Segoe UI", Roboto, sans-serif'
+          fontSize: 11,
+          fontFamily: '"Segoe UI", Roboto, sans-serif',
+          lineHeight: 14,
+          maxLines: 2
         });
       }
 

@@ -1,6 +1,7 @@
 // Motion in 1D Kinematics Laboratory Scene for PhysicsLab
 import { Colors, Renderer } from '../../engine/renderer.js';
 import { Slider } from '../../engine/ui.js';
+import { LayoutEngine } from '../../engine/layout.js';
 import { Kinematics1DPhysics } from '../../physics/mechanics/kinematics.js';
 import { VectorRenderer } from '../../engine/vectorRenderer.js';
 import { GraphRenderer } from '../../engine/graphRenderer.js';
@@ -56,20 +57,16 @@ export class Kinematics1DScene {
 
   rebuildUI() {
     const { width, height } = this.canvasEngine.getBounds();
-    this.controlBar.setBounds(20, 12, width - 40);
+    const layout = LayoutEngine.calculateExperimentLayout(width, height);
 
-    const sidebarW = Math.max(260, Math.min(320, width * 0.28));
-    const sidebarX = width - sidebarW - 20;
-    const contentY = 64;
-    const contentH = height - contentY - 20;
+    this.controlBar.setBounds(layout.toolbarRect.x, layout.toolbarRect.y, layout.toolbarRect.width);
 
-    // Sliders
     this.sliders = [];
-    let sY = contentY + 20;
-    const sW = sidebarW - 40;
+    let sY = layout.controlRect.y + 16;
+    const sW = layout.controlRect.width - 24;
 
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: -30,
@@ -82,9 +79,9 @@ export class Kinematics1DScene {
       callback: (val) => this.physics.setParameters(this.physics.x0, val, this.physics.a)
     }));
 
-    sY += 60;
+    sY += 46;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: -10,
@@ -97,9 +94,9 @@ export class Kinematics1DScene {
       callback: (val) => this.physics.setParameters(this.physics.x0, this.physics.v0, val)
     }));
 
-    sY += 60;
+    sY += 46;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: -50,
@@ -112,16 +109,11 @@ export class Kinematics1DScene {
       callback: (val) => this.physics.setParameters(val, this.physics.v0, this.physics.a)
     }));
 
-    this.sidebarRect = { x: sidebarX, y: contentY, w: sidebarW, h: contentH };
-    this.dataPanel.setRect(sidebarX, contentY + 200, sidebarW, contentH - 200);
-
-    // Simulation Viewport & Graph Viewport
-    const mainW = sidebarX - 40;
-    const simH = Math.floor(contentH * 0.52);
-    const graphH = contentH - simH - 15;
-
-    this.simRect = { x: 20, y: contentY, w: mainW, h: simH };
-    this.graph.setRect(20, contentY + simH + 15, mainW, graphH);
+    this.simRect = layout.simRect;
+    this.controlRect = layout.controlRect;
+    this.dataRect = layout.dataRect;
+    this.dataPanel.setRect(layout.dataRect.x, layout.dataRect.y, layout.dataRect.width, layout.dataRect.height);
+    this.graph.setRect(layout.graphRect.x, layout.graphRect.y, layout.graphRect.width, layout.graphRect.height);
   }
 
   handleInput(inputManager) {
@@ -178,36 +170,45 @@ export class Kinematics1DScene {
 
     this.controlBar.render(ctx);
 
-    // Sidebar & Data Panel
-    if (this.sidebarRect) {
-      Renderer.drawPanel(ctx, this.sidebarRect.x, this.sidebarRect.y, this.sidebarRect.w, this.sidebarRect.h, {
+    // Control Panel
+    if (this.controlRect) {
+      Renderer.drawPanel(ctx, this.controlRect.x, this.controlRect.y, this.controlRect.width, this.controlRect.height, {
         fill: Colors.panel,
         stroke: Colors.panelBorder
       });
-      Renderer.drawText(ctx, 'KINEMATICS PARAMETERS', this.sidebarRect.x + 16, this.sidebarRect.y + 16, {
+      Renderer.drawText(ctx, 'KINEMATICS PARAMETERS', this.controlRect.x + 14, this.controlRect.y + 14, {
         fill: Colors.textMuted,
         font: 'bold 11px "Segoe UI"'
       });
       for (const s of this.sliders) {
         s.render(ctx);
       }
+    }
+
+    // Data Panel
+    if (this.dataRect) {
       this.dataPanel.render(ctx);
     }
 
-    // 1D Simulation Viewport
+    // 1D Simulation Viewport with strict clipping
     if (this.simRect) {
-      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.w, this.simRect.h, {
+      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height, {
         fill: '#090E1A',
         stroke: Colors.panelBorder
       });
 
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height);
+      ctx.clip();
+
       const st = this.physics.getCurrentState();
-      const originX = this.simRect.x + this.simRect.w / 2;
-      const trackY = this.simRect.y + this.simRect.h / 2;
+      const originX = this.simRect.x + this.simRect.width / 2;
+      const trackY = this.simRect.y + this.simRect.height / 2;
       const scale = 3.0; // 3 pixels per meter
 
       // Draw Coordinate Axis
-      Renderer.drawLine(ctx, this.simRect.x + 20, trackY, this.simRect.x + this.simRect.w - 20, trackY, {
+      Renderer.drawLine(ctx, this.simRect.x + 10, trackY, this.simRect.x + this.simRect.width - 10, trackY, {
         stroke: 'rgba(255, 255, 255, 0.2)',
         lineWidth: 2
       });
@@ -215,7 +216,7 @@ export class Kinematics1DScene {
       // Axis graduation ticks
       for (let m = -80; m <= 80; m += 10) {
         const tx = originX + m * scale;
-        if (tx >= this.simRect.x + 20 && tx <= this.simRect.x + this.simRect.w - 20) {
+        if (tx >= this.simRect.x + 10 && tx <= this.simRect.x + this.simRect.width - 10) {
           Renderer.drawLine(ctx, tx, trackY - 6, tx, trackY + 6, {
             stroke: m === 0 ? Colors.cyan : 'rgba(255, 255, 255, 0.3)',
             lineWidth: m === 0 ? 2 : 1
@@ -262,6 +263,8 @@ export class Kinematics1DScene {
           });
         }
       }
+
+      ctx.restore();
     }
 
     this.graph.render(ctx);

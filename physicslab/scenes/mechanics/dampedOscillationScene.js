@@ -2,6 +2,7 @@
 import { Colors, Renderer } from '../../engine/renderer.js';
 import { Slider } from '../../engine/ui.js';
 import { DampedOscillationPhysics } from '../../physics/mechanics/shm.js';
+import { VectorRenderer } from '../../engine/vectorRenderer.js';
 import { GraphRenderer } from '../../engine/graphRenderer.js';
 import { MechanicsControlBar, MechanicsDataPanel, MechanicsModalOverlay } from '../../engine/mechanicsUI.js';
 

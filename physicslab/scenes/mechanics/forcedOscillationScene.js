@@ -5,6 +5,7 @@ import { ForcedOscillationPhysics } from '../../physics/mechanics/shm.js';
 import { GraphRenderer } from '../../engine/graphRenderer.js';
 import { MechanicsControlBar, MechanicsDataPanel, MechanicsModalOverlay } from '../../engine/mechanicsUI.js';
 import { VectorRenderer } from '../../engine/vectorRenderer.js';
+import { LayoutEngine } from '../../engine/layout.js';
 
 export class ForcedOscillationScene {
   constructor() {
@@ -44,7 +45,7 @@ export class ForcedOscillationScene {
     this.dataPanel = new MechanicsDataPanel({ title: 'FORCED RESPONSE' });
     this.modal = new MechanicsModalOverlay();
     this.graph = new GraphRenderer({
-      title: 'Displacement x(t) vs Time (RK4 Simulation)',
+      title: 'Displacement x(t) vs Time',
       xLabel: 'Time',
       xUnit: 's',
       yLabel: 'Displacement',
@@ -63,19 +64,16 @@ export class ForcedOscillationScene {
 
   rebuildUI() {
     const { width, height } = this.canvasEngine.getBounds();
-    this.controlBar.setBounds(20, 12, width - 40);
+    const layout = LayoutEngine.calculateExperimentLayout(width, height);
 
-    const sidebarW = Math.max(260, Math.min(320, width * 0.28));
-    const sidebarX = width - sidebarW - 20;
-    const contentY = 64;
-    const contentH = height - contentY - 20;
+    this.controlBar.setBounds(layout.toolbarRect.x, layout.toolbarRect.y, layout.toolbarRect.width);
 
     this.sliders = [];
-    let sY = contentY + 20;
-    const sW = sidebarW - 40;
+    let sY = layout.controlRect.y + 16;
+    const sW = layout.controlRect.width - 24;
 
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 1.0,
@@ -84,13 +82,13 @@ export class ForcedOscillationScene {
       step: 0.1,
       label: 'DRIVING FREQUENCY (ω)',
       unit: ' rad/s',
-      accentColor: '#8B5CF6',
+      accentColor: Colors.purple,
       callback: (val) => this.physics.setParameters(this.physics.mass, this.physics.springConstant, this.physics.damping, this.physics.f0, val)
     }));
 
-    sY += 55;
+    sY += 44;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 0,
@@ -103,9 +101,9 @@ export class ForcedOscillationScene {
       callback: (val) => this.physics.setParameters(this.physics.mass, this.physics.springConstant, this.physics.damping, val, this.physics.drivingOmega)
     }));
 
-    sY += 55;
+    sY += 44;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 0.05,
@@ -118,15 +116,10 @@ export class ForcedOscillationScene {
       callback: (val) => this.physics.setParameters(this.physics.mass, this.physics.springConstant, val, this.physics.f0, this.physics.drivingOmega)
     }));
 
-    this.sidebarRect = { x: sidebarX, y: contentY, w: sidebarW, h: contentH };
-    this.dataPanel.setRect(sidebarX, contentY + 200, sidebarW, contentH - 200);
-
-    const mainW = sidebarX - 40;
-    const simH = Math.floor(contentH * 0.40);
-    const graphH = contentH - simH - 15;
-
-    this.simRect = { x: 20, y: contentY, w: mainW, h: simH };
-    this.graph.setRect(20, contentY + simH + 15, mainW, graphH);
+    this.simRect = layout.simRect;
+    this.controlRect = layout.controlRect;
+    this.dataPanel.setRect(layout.dataRect.x, layout.dataRect.y, layout.dataRect.width, layout.dataRect.height);
+    this.graph.setRect(layout.graphRect.x, layout.graphRect.y, layout.graphRect.width, layout.graphRect.height);
   }
 
   handleInput(inputManager) {
@@ -146,135 +139,96 @@ export class ForcedOscillationScene {
     this.physics.update(effectiveDt);
     this.controlBar.setRunning(this.physics.isRunning);
 
-    this.dataPanel.setMetrics([
-      { label: 'Natural Freq (ω₀)', value: `${this.physics.naturalOmega.toFixed(2)} rad/s` },
-      { label: 'Driving Freq (ω)', value: `${this.physics.drivingOmega.toFixed(2)} rad/s` },
-      { label: 'Current Pos (x)', value: `${this.physics.pos.toFixed(3)} m` },
-      { label: 'Current Vel (v)', value: `${this.physics.vel.toFixed(3)} m/s` },
-      { label: 'Steady State Amp', value: `${this.physics.steadyStateAmplitude.toFixed(2)} m` },
-      { label: 'Driving Force F(t)', value: `${(this.physics.f0 * Math.cos(this.physics.drivingOmega * this.physics.time)).toFixed(1)} N` },
-      { label: 'Status', value: this.physics.isAtResonance ? 'NEAR RESONANCE!' : 'FORCED OSCILLATION' }
+    if (this.modal.isOpen) {
+      this.modal.update(dt, this.inputManager);
+      return;
+    }
+
+    this.controlBar.update(dt, this.inputManager);
+    for (const s of this.sliders) s.update(dt, this.inputManager);
+
+    this.dataPanel.setItems([
+      { label: 'Natural Freq (ω₀)', value: (this.physics.naturalOmega || 0).toFixed(2), unit: 'rad/s', color: Colors.cyan },
+      { label: 'Driving Freq (ω)', value: (this.physics.drivingOmega || 0).toFixed(2), unit: 'rad/s', color: Colors.purple },
+      { label: 'Current Pos (x)', value: (this.physics.pos || 0).toFixed(2), unit: 'm', color: Colors.text },
+      { label: 'Current Vel (v)', value: (this.physics.vel || 0).toFixed(2), unit: 'm/s', color: Colors.cyan },
+      { label: 'Steady State Amp', value: (this.physics.steadyStateAmplitude || 0).toFixed(2), unit: 'm', color: Colors.yellow },
+      { label: 'Driving Force F(t)', value: ((this.physics.f0 || 0) * Math.cos((this.physics.drivingOmega || 0) * (this.physics.time || 0))).toFixed(1), unit: 'N', color: '#EF4444' }
     ]);
 
-    if (this.physics.history.length > 1) {
+    if (this.physics.history && this.physics.history.length > 1) {
       const xDataset = this.physics.history.map(pt => ({ x: pt.t, y: pt.x }));
-      const maxT = this.physics.history[this.physics.history.length - 1].t;
-      const minT = Math.max(0, maxT - 15);
-
-      this.graph.setDatasets([
-        { label: 'Displacement x(t)', data: xDataset, color: Colors.cyan, width: 2 }
-      ]);
-      this.graph.setLimits(minT, maxT, -this.physics.steadyStateAmplitude * 1.5 - 2, this.physics.steadyStateAmplitude * 1.5 + 2);
+      this.graph.clearDatasets();
+      this.graph.addDataset({ label: 'Displacement x(t)', color: Colors.cyan, points: xDataset });
     }
   }
 
   render(ctx) {
-    Renderer.drawRect(ctx, 0, 0, ctx.canvas.width, ctx.canvas.height, { fill: Colors.bgDark });
+    const { width, height } = this.canvasEngine.getBounds();
+
+    Renderer.drawRect(ctx, 0, 0, width, height, { fill: Colors.background });
+    Renderer.drawGrid(ctx, width, height, 40);
 
     this.controlBar.render(ctx);
 
-    // Sidebar
-    Renderer.drawCard(ctx, this.sidebarRect.x, this.sidebarRect.y, this.sidebarRect.w, this.sidebarRect.h, {
-      title: 'DRIVER & DAMPING CONTROLS',
-      accentColor: '#8B5CF6'
-    });
-
-    for (const slider of this.sliders) {
-      slider.render(ctx);
+    if (this.controlRect) {
+      Renderer.drawPanel(ctx, this.controlRect.x, this.controlRect.y, this.controlRect.width, this.controlRect.height, {
+        fill: Colors.panel,
+        stroke: Colors.panelBorder
+      });
+      Renderer.drawText(ctx, 'DRIVER & DAMPING CONTROLS', this.controlRect.x + 12, this.controlRect.y + 6, {
+        fill: Colors.textMuted,
+        font: 'bold 10px "Segoe UI"'
+      });
+      for (const s of this.sliders) s.render(ctx);
     }
+
     this.dataPanel.render(ctx);
 
-    // Simulation Viewport
-    Renderer.drawCard(ctx, this.simRect.x, this.simRect.y, this.simRect.w, this.simRect.h, {
-      title: 'PHYSICAL OSCILLATOR SYSTEM',
-      accentColor: this.physics.isAtResonance ? '#EF4444' : Colors.cyan
-    });
+    if (this.simRect) {
+      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height, {
+        fill: '#090E1A',
+        stroke: Colors.panelBorder
+      });
 
-    this.renderOscillatorSystem(ctx);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height);
+      ctx.clip();
 
-    // Graph
+      const centerY = this.simRect.y + this.simRect.height / 2;
+      const originX = this.simRect.x + 60;
+      const scale = 8.0;
+      const blockX = originX + 120 + (this.physics.pos || 0) * scale;
+
+      // Spring coil line
+      Renderer.drawLine(ctx, originX, centerY, blockX - 25, centerY, {
+        stroke: Colors.cyan,
+        lineWidth: 2.5
+      });
+
+      // Mass block
+      Renderer.drawRoundedRect(ctx, blockX - 25, centerY - 25, 50, 50, 6, {
+        fill: '#151F30',
+        stroke: Colors.cyan,
+        lineWidth: 2,
+        glowColor: Colors.cyan,
+        glowBlur: 8
+      });
+
+      // Vectors
+      if (this.controlBar.showVectors) {
+        const fDrive = (this.physics.f0 || 0) * Math.cos((this.physics.drivingOmega || 0) * (this.physics.time || 0));
+        VectorRenderer.drawVector(ctx, blockX, centerY - 35, fDrive * 1.5, 0, 1.0, {
+          color: '#EF4444',
+          label: `F_drive=${fDrive.toFixed(1)}N`
+        });
+      }
+
+      ctx.restore();
+    }
+
     this.graph.render(ctx);
-
-    // Modal
-    this.modal.render(ctx);
-  }
-
-  renderOscillatorSystem(ctx) {
-    const cx = this.simRect.x + this.simRect.w * 0.5;
-    const cy = this.simRect.y + this.simRect.h * 0.55;
-
-    // Fixed wall
-    const wallX = this.simRect.x + 40;
-    Renderer.drawRect(ctx, wallX - 10, cy - 60, 10, 120, { fill: '#334155' });
-    for (let y = cy - 55; y < cy + 55; y += 12) {
-      Renderer.drawLine(ctx, wallX - 10, y + 10, wallX, y, { color: '#64748B', width: 2 });
-    }
-
-    // Equilibrium marker
-    Renderer.drawLine(ctx, cx, cy - 50, cx, cy + 50, { color: '#64748B', width: 1, dash: [4, 4] });
-    Renderer.drawText(ctx, 'Equilibrium x = 0', cx, cy - 55, { color: '#94A3B8', size: 11, align: 'center' });
-
-    // Block position: scale 1 m = 18 px
-    const scale = 18;
-    const blockX = cx + this.physics.pos * scale;
-    const blockW = 60;
-    const blockH = 50;
-
-    // Draw Spring
-    VectorRenderer.drawSpring(ctx, wallX, cy - 12, blockX - blockW / 2, cy - 12, {
-      coils: 12,
-      radius: 12,
-      color: Colors.yellow,
-      lineWidth: 2.5
-    });
-
-    // Draw Dashpot/Damper
-    const damperY = cy + 18;
-    Renderer.drawLine(ctx, wallX, damperY, blockX - blockW / 2 - 20, damperY, { color: '#64748B', width: 3 });
-    // Damper cylinder
-    Renderer.drawRect(ctx, blockX - blockW / 2 - 35, damperY - 8, 25, 16, { fill: '#1E293B', stroke: '#94A3B8', width: 1.5 });
-    // Piston
-    Renderer.drawLine(ctx, blockX - blockW / 2 - 25, damperY - 6, blockX - blockW / 2 - 25, damperY + 6, { color: '#EF4444', width: 3 });
-    Renderer.drawLine(ctx, blockX - blockW / 2 - 25, damperY, blockX - blockW / 2, damperY, { color: '#EF4444', width: 2 });
-
-    // Draw Block
-    Renderer.drawRect(ctx, blockX - blockW / 2, cy - blockH / 2, blockW, blockH, {
-      fill: '#0284C7',
-      stroke: Colors.cyan,
-      width: 2,
-      radius: 4
-    });
-    Renderer.drawText(ctx, `${this.physics.mass} kg`, blockX, cy + 4, {
-      color: '#FFFFFF',
-      size: 12,
-      weight: 'bold',
-      align: 'center'
-    });
-
-    // Draw Periodic Driving Force arrow F(t)
-    const drivingF = this.physics.f0 * Math.cos(this.physics.drivingOmega * this.physics.time);
-    const forceArrowLen = drivingF * 1.5;
-    if (Math.abs(forceArrowLen) > 3) {
-      VectorRenderer.drawVector(ctx, blockX, cy - 35, forceArrowLen, 0, {
-        color: '#A855F7',
-        lineWidth: 3,
-        label: `F_drive: ${drivingF.toFixed(1)} N`
-      });
-    }
-
-    if (this.physics.isAtResonance) {
-      Renderer.drawRect(ctx, cx - 100, this.simRect.y + 12, 200, 24, {
-        fill: 'rgba(239, 68, 68, 0.25)',
-        stroke: '#EF4444',
-        width: 1.5,
-        radius: 4
-      });
-      Renderer.drawText(ctx, '⚡ RESONANCE CONDITION ⚡', cx, this.simRect.y + 28, {
-        color: '#FCA5A5',
-        size: 11,
-        weight: 'bold',
-        align: 'center'
-      });
-    }
+    this.modal.render(ctx, width, height);
   }
 }

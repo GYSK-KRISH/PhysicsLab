@@ -5,6 +5,7 @@ import { AdvancedProjectilePhysics } from '../../physics/mechanics/projectile.js
 import { VectorRenderer } from '../../engine/vectorRenderer.js';
 import { GraphRenderer } from '../../engine/graphRenderer.js';
 import { MechanicsControlBar, MechanicsDataPanel, MechanicsModalOverlay } from '../../engine/mechanicsUI.js';
+import { LayoutEngine } from '../../engine/layout.js';
 
 export class ProjectileLabScene {
   constructor() {
@@ -63,19 +64,16 @@ export class ProjectileLabScene {
 
   rebuildUI() {
     const { width, height } = this.canvasEngine.getBounds();
-    this.controlBar.setBounds(20, 12, width - 40);
+    const layout = LayoutEngine.calculateExperimentLayout(width, height);
 
-    const sidebarW = Math.max(260, Math.min(320, width * 0.28));
-    const sidebarX = width - sidebarW - 20;
-    const contentY = 64;
-    const contentH = height - contentY - 20;
+    this.controlBar.setBounds(layout.toolbarRect.x, layout.toolbarRect.y, layout.toolbarRect.width);
 
     this.sliders = [];
-    let sY = contentY + 20;
-    const sW = sidebarW - 40;
+    let sY = layout.controlRect.y + 16;
+    const sW = layout.controlRect.width - 24;
 
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 5,
@@ -88,9 +86,9 @@ export class ProjectileLabScene {
       callback: (val) => this.physics.setParameters(val, this.physics.angle, this.physics.gravity, this.physics.launchHeight, this.physics.airResistance)
     }));
 
-    sY += 55;
+    sY += 44;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 0,
@@ -103,14 +101,14 @@ export class ProjectileLabScene {
       callback: (val) => this.physics.setParameters(this.physics.velocity, val, this.physics.gravity, this.physics.launchHeight, this.physics.airResistance)
     }));
 
-    sY += 55;
+    sY += 44;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 0,
       max: 30,
-      value: this.physics.launchHeight,
+      value: this.physics.launchHeight || 0,
       step: 1,
       label: 'LAUNCH HEIGHT (h0)',
       unit: ' m',
@@ -118,30 +116,26 @@ export class ProjectileLabScene {
       callback: (val) => this.physics.setParameters(this.physics.velocity, this.physics.angle, this.physics.gravity, val, this.physics.airResistance)
     }));
 
-    sY += 55;
+    sY += 44;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 0,
-      max: 0.1,
-      value: this.physics.airResistance,
-      step: 0.005,
-      label: 'AIR DRAG (k)',
-      unit: '',
+      max: 20,
+      value: this.physics.gravity,
+      step: 0.1,
+      label: 'GRAVITY (g)',
+      unit: ' m/s²',
       accentColor: Colors.yellow,
-      callback: (val) => this.physics.setParameters(this.physics.velocity, this.physics.angle, this.physics.gravity, this.physics.launchHeight, val)
+      callback: (val) => this.physics.setParameters(this.physics.velocity, this.physics.angle, val, this.physics.launchHeight, this.physics.airResistance)
     }));
 
-    this.sidebarRect = { x: sidebarX, y: contentY, w: sidebarW, h: contentH };
-    this.dataPanel.setRect(sidebarX, contentY + 250, sidebarW, contentH - 250);
+    this.dataPanel.setRect(layout.dataRect.x, layout.dataRect.y, layout.dataRect.width, layout.dataRect.height);
+    this.graph.setRect(layout.graphRect.x, layout.graphRect.y, layout.graphRect.width, layout.graphRect.height);
 
-    const mainW = sidebarX - 40;
-    const simH = Math.floor(contentH * 0.54);
-    const graphH = contentH - simH - 15;
-
-    this.simRect = { x: 20, y: contentY, w: mainW, h: simH };
-    this.graph.setRect(20, contentY + simH + 15, mainW, graphH);
+    this.simRect = layout.simRect;
+    this.controlRect = layout.controlRect;
   }
 
   handleInput(inputManager) {
@@ -159,7 +153,7 @@ export class ProjectileLabScene {
   update(dt) {
     const effectiveDt = this.isSlowMo ? dt * 0.25 : dt;
     this.physics.update(effectiveDt);
-    this.controlBar.setRunning(this.physics.isRunning);
+    this.controlBar.setRunning(this.physics.isFlying);
 
     if (this.modal.isOpen) {
       this.modal.update(dt, this.inputManager);
@@ -175,9 +169,9 @@ export class ProjectileLabScene {
     this.dataPanel.setItems([
       { label: 'Time (t)', value: st.t.toFixed(2), unit: 's', color: Colors.text },
       { label: 'Position (X, Y)', value: `(${st.x.toFixed(1)}, ${st.y.toFixed(1)})`, unit: 'm', color: Colors.purple },
-      { label: 'Speed |v|', value: st.speed.toFixed(2), unit: 'm/s', color: Colors.cyan },
-      { label: 'Max Height (H)', value: st.maxHeight.toFixed(2), unit: 'm', color: Colors.yellow },
-      { label: 'Range (R)', value: st.range.toFixed(2), unit: 'm', color: Colors.green }
+      { label: 'Speed |v|', value: st.v.toFixed(2), unit: 'm/s', color: Colors.cyan },
+      { label: 'Max Height (H)', value: this.physics.maxHeight.toFixed(2), unit: 'm', color: Colors.yellow },
+      { label: 'Range (R)', value: this.physics.range.toFixed(2), unit: 'm', color: Colors.green }
     ]);
 
     const traj = this.physics.trajectory.map(p => ({ x: p.x, y: p.y }));
@@ -193,53 +187,43 @@ export class ProjectileLabScene {
 
     this.controlBar.render(ctx);
 
-    if (this.sidebarRect) {
-      Renderer.drawPanel(ctx, this.sidebarRect.x, this.sidebarRect.y, this.sidebarRect.w, this.sidebarRect.h, {
+    if (this.controlRect) {
+      Renderer.drawPanel(ctx, this.controlRect.x, this.controlRect.y, this.controlRect.width, this.controlRect.height, {
         fill: Colors.panel,
         stroke: Colors.panelBorder
-      });
-      Renderer.drawText(ctx, 'PROJECTILE PARAMETERS', this.sidebarRect.x + 16, this.sidebarRect.y + 16, {
-        fill: Colors.textMuted,
-        font: 'bold 11px "Segoe UI"'
       });
       for (const s of this.sliders) {
         s.render(ctx);
       }
-      this.dataPanel.render(ctx);
     }
 
+    this.dataPanel.render(ctx);
+
     if (this.simRect) {
-      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.w, this.simRect.h, {
+      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height, {
         fill: '#090E1A',
         stroke: Colors.panelBorder
       });
 
       const st = this.physics.getCurrentState();
-      const originX = this.simRect.x + 40;
-      const groundY = this.simRect.y + this.simRect.h - 40;
-      const scale = 4.5; // 4.5 px per meter
+      const originX = this.simRect.x + 30;
+      const groundY = this.simRect.y + this.simRect.height - 30;
+      const scale = Math.min(
+        (this.simRect.width - 60) / Math.max(10, this.physics.range * 1.1),
+        (this.simRect.height - 60) / Math.max(10, this.physics.maxHeight * 1.2)
+      );
 
       // Ground line
-      Renderer.drawLine(ctx, originX - 20, groundY, this.simRect.x + this.simRect.w - 20, groundY, {
+      Renderer.drawLine(ctx, originX - 10, groundY, this.simRect.x + this.simRect.width - 10, groundY, {
         stroke: Colors.panelBorder,
         lineWidth: 3
       });
-
-      // Elevated Launch Platform
-      if (this.physics.launchHeight > 0) {
-        const platH = this.physics.launchHeight * scale;
-        Renderer.drawRect(ctx, originX - 25, groundY - platH, 30, platH, {
-          fill: '#151F30',
-          stroke: Colors.panelBorder
-        });
-        VectorRenderer.drawRuler(ctx, originX - 32, groundY, originX - 32, groundY - platH, this.physics.launchHeight, 'm');
-      }
 
       // Trajectory Path
       if (this.physics.trajectory.length > 1) {
         ctx.save();
         ctx.strokeStyle = 'rgba(94, 231, 255, 0.5)';
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 2;
         ctx.beginPath();
         for (let i = 0; i < this.physics.trajectory.length; i++) {
           const pt = this.physics.trajectory[i];
@@ -256,19 +240,19 @@ export class ProjectileLabScene {
       const ballX = originX + st.x * scale;
       const ballY = groundY - st.y * scale;
 
-      Renderer.drawCircle(ctx, ballX, ballY, 8, {
+      Renderer.drawCircle(ctx, ballX, ballY, 7, {
         fill: Colors.yellow,
         stroke: '#FFFFFF',
         lineWidth: 2,
         glowColor: Colors.yellow,
-        glowBlur: 10
+        glowBlur: 8
       });
 
       // Velocity vector
-      if (this.controlBar.showVectors) {
-        VectorRenderer.drawVector(ctx, ballX, ballY, st.vx * 2.0, -st.vy * 2.0, 1.0, {
+      if (this.controlBar.showVectors && Math.abs(st.v) > 0.1) {
+        VectorRenderer.drawVector(ctx, ballX, ballY, st.vx * 1.5, -st.vy * 1.5, 1.0, {
           color: Colors.cyan,
-          label: `v=${st.speed.toFixed(1)}m/s`,
+          label: `v=${st.v.toFixed(1)}m/s`,
           glow: true
         });
       }

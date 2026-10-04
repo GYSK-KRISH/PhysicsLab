@@ -1,6 +1,7 @@
 // Dedicated Numerical Physics Problems Scene for PhysicsLab
 import { Colors, Renderer } from '../../engine/renderer.js';
 import { Button } from '../../engine/ui.js';
+import { TextEngine } from '../../engine/textEngine.js';
 import { MechanicsProblemGenerator } from '../../physics/mechanics/problems.js';
 
 export class NumericalProblemsScene {
@@ -32,13 +33,17 @@ export class NumericalProblemsScene {
     this.buttons = [];
     this.keypadButtons = [];
 
+    const isSmall = width < 720;
+    const navW = isSmall ? 130 : 150;
+    const navH = 36;
+
     // Back to Mechanics Menu
     this.buttons.push(new Button({
-      x: 20,
-      y: 16,
-      width: 150,
-      height: 38,
-      text: '← MECHANICS LAB',
+      x: 16,
+      y: 12,
+      width: navW,
+      height: navH,
+      text: '← LAB MENU',
       accentColor: Colors.purple,
       callback: () => {
         import('./mechanicsMenuScene.js').then(m => this.sceneManager.changeScene(new m.MechanicsMenuScene()));
@@ -47,10 +52,10 @@ export class NumericalProblemsScene {
 
     // New Random Problem Button
     this.buttons.push(new Button({
-      x: 190,
-      y: 16,
-      width: 170,
-      height: 38,
+      x: 16 + navW + 12,
+      y: 12,
+      width: isSmall ? 140 : 160,
+      height: navH,
       text: '⚡ NEW PROBLEM',
       accentColor: Colors.yellow,
       callback: () => {
@@ -59,15 +64,32 @@ export class NumericalProblemsScene {
       }
     }));
 
-    // Keypad coordinates
-    const cardW = Math.min(680, width - 40);
+    // Card Layout
+    const cardW = Math.min(680, width - 32);
     const cardX = (width - cardW) / 2;
-    const contentY = 70;
-    const inputY = contentY + 110;
-    const padX = cardX + 24;
-    const padY = inputY + 60;
-    const padKeyW = 65;
-    const padKeyH = 40;
+    const contentY = 60;
+
+    // Measure question height
+    const dummyCtx = this.canvasEngine.ctx;
+    const qWrap = dummyCtx ? TextEngine.wrapText(dummyCtx, this.currentProblem ? this.currentProblem.question : '', cardW - 32, {
+      fontSize: 13,
+      fontFamily: '"Segoe UI", Roboto, sans-serif'
+    }) : { lines: [''], totalHeight: 30 };
+
+    this.qBoxH = Math.max(80, qWrap.totalHeight + 46);
+
+    const inputY = contentY + this.qBoxH + 12;
+    this.inputBoxH = 44;
+
+    const padY = inputY + this.inputBoxH + 14;
+
+    // Responsive keypad keys
+    const availablePadW = cardW - 32;
+    const isNarrowPad = availablePadW < 360;
+
+    const padKeyW = isNarrowPad ? Math.floor(availablePadW * 0.18) : Math.min(75, Math.floor(availablePadW * 0.17));
+    const padKeyH = isSmall ? 36 : 40;
+    const padGap = isNarrowPad ? 6 : 8;
 
     const keys = [
       ['1', '2', '3'],
@@ -76,12 +98,14 @@ export class NumericalProblemsScene {
       ['.', '0', '-']
     ];
 
+    const padX = cardX + 16;
+
     for (let r = 0; r < keys.length; r++) {
       for (let c = 0; c < keys[r].length; c++) {
         const val = keys[r][c];
         const kBtn = new Button({
-          x: padX + c * (padKeyW + 10),
-          y: padY + r * (padKeyH + 8),
+          x: padX + c * (padKeyW + padGap),
+          y: padY + r * (padKeyH + padGap),
           width: padKeyW,
           height: padKeyH,
           text: val,
@@ -93,8 +117,9 @@ export class NumericalProblemsScene {
     }
 
     // Action Keypad Buttons
-    const actX = padX + 3 * (padKeyW + 10) + 16;
-    const actW = 140;
+    const numPadWidth = 3 * padKeyW + 2 * padGap;
+    const actX = padX + numPadWidth + (isNarrowPad ? 10 : 16);
+    const actW = Math.max(100, cardW - 32 - numPadWidth - (isNarrowPad ? 10 : 16));
 
     this.keypadButtons.push(new Button({
       x: actX,
@@ -108,23 +133,25 @@ export class NumericalProblemsScene {
 
     this.keypadButtons.push(new Button({
       x: actX,
-      y: padY + (padKeyH + 8),
+      y: padY + (padKeyH + padGap),
       width: actW,
       height: padKeyH,
-      text: '⌫ BACKSPACE',
+      text: '⌫ BACK',
       accentColor: Colors.textMuted,
       callback: () => this.handleKey('BACK')
     }));
 
     this.keypadButtons.push(new Button({
       x: actX,
-      y: padY + 2 * (padKeyH + 8),
+      y: padY + 2 * (padKeyH + padGap),
       width: actW,
-      height: padKeyH * 2 + 8,
-      text: 'CHECK ANSWER',
+      height: padKeyH * 2 + padGap,
+      text: 'SUBMIT',
       accentColor: Colors.green,
       callback: () => this.handleKey('SUBMIT')
     }));
+
+    this.feedbackY = padY + 4 * (padKeyH + padGap) + 10;
   }
 
   handleKey(val) {
@@ -196,37 +223,39 @@ export class NumericalProblemsScene {
       btn.render(ctx);
     }
 
-    const cardW = Math.min(680, width - 40);
+    const cardW = Math.min(680, width - 32);
     const cardX = (width - cardW) / 2;
-    const contentY = 70;
+    const contentY = 60;
 
     // Question Box
     if (this.currentProblem) {
-      Renderer.drawPanel(ctx, cardX, contentY, cardW, 95, {
+      Renderer.drawPanel(ctx, cardX, contentY, cardW, this.qBoxH, {
         fill: '#0E1522',
         stroke: Colors.panelBorder,
-        radius: 10
+        radius: 8
       });
 
-      Renderer.drawText(ctx, `TOPIC: ${this.currentProblem.category.toUpperCase()}`, cardX + 20, contentY + 22, {
+      Renderer.drawText(ctx, `TOPIC: ${this.currentProblem.category.toUpperCase()}`, cardX + 16, contentY + 16, {
         fill: Colors.yellow,
-        font: 'bold 11px "Segoe UI", Roboto, sans-serif'
+        font: 'bold 10px "Segoe UI", Roboto, sans-serif'
       });
 
-      Renderer.drawText(ctx, `Accuracy: ${this.solvedCount} / ${this.totalAttempts}`, cardX + cardW - 20, contentY + 22, {
+      Renderer.drawText(ctx, `Score: ${this.solvedCount} / ${this.totalAttempts}`, cardX + cardW - 16, contentY + 16, {
         fill: Colors.green,
-        font: 'bold 11px "Segoe UI", Roboto, sans-serif',
+        font: 'bold 10px "Segoe UI", Roboto, sans-serif',
         align: 'right'
       });
 
-      Renderer.drawText(ctx, this.currentProblem.question, cardX + 20, contentY + 54, {
+      TextEngine.drawWrappedText(ctx, this.currentProblem.question, cardX + 16, contentY + 32, cardW - 32, {
         fill: Colors.text,
-        font: '14px "Segoe UI", Roboto, sans-serif'
+        fontSize: 13,
+        fontFamily: '"Segoe UI", Roboto, sans-serif',
+        lineHeight: 18
       });
 
       // Input Display Box
-      const inputY = contentY + 110;
-      Renderer.drawPanel(ctx, cardX, inputY, cardW, 46, {
+      const inputY = contentY + this.qBoxH + 12;
+      Renderer.drawPanel(ctx, cardX, inputY, cardW, this.inputBoxH, {
         fill: '#060A13',
         stroke: this.problemResult ? (this.problemResult.isCorrect ? Colors.green : '#EF4444') : Colors.cyan,
         lineWidth: 1.5,
@@ -234,9 +263,9 @@ export class NumericalProblemsScene {
       });
 
       const displayTxt = (this.keypadInput || '0') + ` ${this.currentProblem.unit}`;
-      Renderer.drawText(ctx, displayTxt, cardX + cardW - 20, inputY + 23, {
+      Renderer.drawText(ctx, displayTxt, cardX + cardW - 16, inputY + this.inputBoxH / 2, {
         fill: Colors.cyan,
-        font: 'bold 22px "Courier New", monospace',
+        font: 'bold 20px "Courier New", monospace',
         align: 'right',
         baseline: 'middle'
       });
@@ -248,28 +277,33 @@ export class NumericalProblemsScene {
 
     // Solution / Result feedback banner
     if (this.problemResult && this.currentProblem) {
-      const resY = contentY + 360;
+      const resY = this.feedbackY || (contentY + 340);
       const isOk = this.problemResult.isCorrect;
+      const resH = Math.min(110, Math.max(80, height - resY - 12));
 
-      Renderer.drawPanel(ctx, cardX, resY, cardW, 110, {
+      Renderer.drawPanel(ctx, cardX, resY, cardW, resH, {
         fill: isOk ? 'rgba(74, 222, 128, 0.08)' : 'rgba(239, 68, 68, 0.08)',
         stroke: isOk ? Colors.green : '#EF4444',
         radius: 8
       });
 
-      Renderer.drawText(ctx, isOk ? '✓ EXCELLENT! CORRECT ANSWER' : '✗ NOT QUITE RIGHT', cardX + 20, resY + 24, {
+      Renderer.drawText(ctx, isOk ? '✓ EXCELLENT! CORRECT ANSWER' : '✗ NOT QUITE RIGHT', cardX + 16, resY + 18, {
         fill: isOk ? Colors.green : '#EF4444',
-        font: 'bold 15px "Segoe UI", Roboto, sans-serif'
+        font: 'bold 13px "Segoe UI", Roboto, sans-serif'
       });
 
-      Renderer.drawText(ctx, `Correct: ${this.currentProblem.correctAnswer.toFixed(2)} ${this.currentProblem.unit}`, cardX + 20, resY + 50, {
+      Renderer.drawText(ctx, `Correct: ${this.currentProblem.correctAnswer.toFixed(2)} ${this.currentProblem.unit}`, cardX + 16, resY + 38, {
         fill: Colors.textMuted,
-        font: '13px "Segoe UI", Roboto, sans-serif'
+        font: '12px "Segoe UI", Roboto, sans-serif'
       });
 
-      Renderer.drawText(ctx, `Formula: ${this.currentProblem.formula}  |  ${this.currentProblem.solution}`, cardX + 20, resY + 76, {
+      const solText = `Formula: ${this.currentProblem.formula} • ${this.currentProblem.solution}`;
+      TextEngine.drawWrappedText(ctx, solText, cardX + 16, resY + 56, cardW - 32, {
         fill: Colors.yellow,
-        font: '12px "Courier New", monospace'
+        fontSize: 11,
+        fontFamily: '"Courier New", monospace',
+        lineHeight: 14,
+        maxLines: 2
       });
     }
   }

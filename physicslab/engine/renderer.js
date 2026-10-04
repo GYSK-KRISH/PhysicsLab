@@ -1,5 +1,7 @@
 // Renderer Module for PhysicsLab
 
+import { TextEngine } from './textEngine.js';
+
 export const Colors = {
   background: '#080B12',
   panel: '#111722',
@@ -53,19 +55,31 @@ export class Renderer {
     ctx.save();
     this.applyStyles(ctx, options);
     
-    const font = options.font || '16px "Segoe UI", Roboto, sans-serif';
+    let font = options.font || '16px "Segoe UI", Roboto, sans-serif';
+
+    if (options.maxWidth && options.maxWidth > 0) {
+      const match = font.match(/(\d+)px/);
+      const startSize = match ? parseInt(match[1], 10) : 16;
+      const fit = TextEngine.fitFontSize(ctx, text, options.maxWidth, startSize, 10);
+      font = fit.font;
+    }
+
     ctx.font = font;
     ctx.textAlign = options.align || 'left';
     ctx.textBaseline = options.baseline || 'alphabetic';
 
     if (options.fill !== false) {
       ctx.fillStyle = options.fill || Colors.text;
-      ctx.fillText(text, x, y);
+      ctx.fillText(text, x, y, options.maxWidth);
     }
     if (options.stroke) {
-      ctx.strokeText(text, x, y);
+      ctx.strokeText(text, x, y, options.maxWidth);
     }
     ctx.restore();
+  }
+
+  static drawTextWrapped(ctx, text, x, y, maxWidth, options = {}) {
+    return TextEngine.drawWrappedText(ctx, text, x, y, maxWidth, options);
   }
 
   static drawLine(ctx, x1, y1, x2, y2, options = {}) {

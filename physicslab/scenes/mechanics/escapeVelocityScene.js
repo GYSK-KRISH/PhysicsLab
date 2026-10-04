@@ -1,9 +1,10 @@
-// Escape Velocity Laboratory Scene for PhysicsLab
+// Escape Velocity & Planet Gravitation Presets Laboratory Scene for PhysicsLab
 import { Colors, Renderer } from '../../engine/renderer.js';
 import { Button, Slider } from '../../engine/ui.js';
 import { GravitationPhysics, GRAVITATIONAL_CONSTANT } from '../../physics/mechanics/gravitation.js';
 import { VectorRenderer } from '../../engine/vectorRenderer.js';
 import { MechanicsControlBar, MechanicsDataPanel, MechanicsModalOverlay } from '../../engine/mechanicsUI.js';
+import { LayoutEngine } from '../../engine/layout.js';
 
 export class EscapeVelocityScene {
   constructor() {
@@ -12,7 +13,7 @@ export class EscapeVelocityScene {
     this.planetRadius = 6.371e6; // Earth radius
     this.launchSpeed = 11200; // m/s
 
-    this.simRadius = 1.0;
+    this.simRadius = 6.371e6;
     this.simSpeed = 11200;
     this.time = 0;
     this.isRunning = false;
@@ -27,15 +28,15 @@ export class EscapeVelocityScene {
         this.isSlowMo = !this.isSlowMo;
         this.controlBar.setSlowMo(this.isSlowMo);
       },
-      onOpenFormula: () => this.modal.openFormula('ESCAPE VELOCITY', [
+      onOpenFormula: () => this.modal.openFormula('ESCAPE VELOCITY & PLANETARY GRAVITY', [
         { name: 'Escape Velocity Formula', formula: 'v_e = √( (2·G·M) / R ) = √(2·g·R)', desc: 'Speed where kinetic energy overcomes gravitational potential well' },
-        { name: 'Energy Conservation at Escape', formula: 'E_total = ½·m·v_e² - (G·M·m)/R = 0', desc: 'Zero total mechanical energy at infinite distance' },
-        { name: 'Orbital Speed Relation', formula: 'v_e = √2 · v_orbital ≈ 1.414 · v_o', desc: '41.4% higher than circular orbital velocity at surface' }
+        { name: 'Surface Gravity g', formula: 'g = (G · M) / R²', desc: 'Local acceleration due to gravity on planet surface' },
+        { name: 'Energy Conservation', formula: 'E_total = ½·m·v_e² - (G·M·m)/R = 0', desc: 'Zero total mechanical energy at infinite distance' }
       ]),
       onOpenConcept: () => this.modal.openConcept('ESCAPE VELOCITY', {
-        what: 'Escape velocity is the minimum initial speed required for an unpowered ballistic projectile to escape completely from a celestial gravitational field.',
-        how: 'If v < v_e, total energy E < 0 and the trajectory falls back. At v = v_e, E = 0 (parabolic escape). If v > v_e, E > 0 (hyperbolic escape).',
-        keyIdea: 'Escape velocity depends solely on the planet\'s mass and radius, completely independent of the projectile\'s mass or launch angle.'
+        what: 'Escape velocity is the minimum initial speed required for a projectile to break free from a planet\'s gravitational pull without further propulsion.',
+        how: 'If launch speed v < v_e, the projectile reaches an apex and falls back. At v = v_e, energy E = 0 (parabolic escape). If v > v_e, E > 0 (hyperbolic escape).',
+        keyIdea: 'Planet presets (Earth: 9.81 m/s², Moon: 1.62 m/s², Mars: 3.71 m/s², Custom) directly scale the gravitational field, escape velocity, and trajectory dynamics.'
       }),
       onOpenProblem: () => this.modal.openProblem('ESCAPE_VELOCITY'),
       onBack: () => {
@@ -43,7 +44,7 @@ export class EscapeVelocityScene {
       }
     });
 
-    this.dataPanel = new MechanicsDataPanel({ title: 'ESCAPE DYNAMICS' });
+    this.dataPanel = new MechanicsDataPanel({ title: 'PLANETARY METRICS' });
     this.modal = new MechanicsModalOverlay();
     this.presetButtons = [];
     this.sliders = [];
@@ -66,6 +67,8 @@ export class EscapeVelocityScene {
       this.planetMass = 6.417e23;
       this.planetRadius = 3.390e6;
       this.launchSpeed = 5030;
+    } else if (preset === 'CUSTOM') {
+      // Keep current mass and radius
     }
     this.reset();
     this.rebuildUI();
@@ -85,26 +88,23 @@ export class EscapeVelocityScene {
 
   rebuildUI() {
     const { width, height } = this.canvasEngine.getBounds();
-    this.controlBar.setBounds(20, 12, width - 40);
+    const layout = LayoutEngine.calculateExperimentLayout(width, height);
 
-    const sidebarW = Math.max(260, Math.min(320, width * 0.28));
-    const sidebarX = width - sidebarW - 20;
-    const contentY = 64;
-    const contentH = height - contentY - 20;
+    this.controlBar.setBounds(layout.toolbarRect.x, layout.toolbarRect.y, layout.toolbarRect.width);
 
-    // Presets Buttons
+    // Sidebar Preset Buttons & Sliders
     this.presetButtons = [];
-    const presets = ['EARTH', 'MOON', 'MARS'];
-    const pbW = (sidebarW - 40) / 3;
+    const presets = ['EARTH', 'MOON', 'MARS', 'CUSTOM'];
+    const pW = (layout.controlRect.width - 24) / 4;
 
     for (let i = 0; i < presets.length; i++) {
       const p = presets[i];
       const isSel = this.selectedBody === p;
       this.presetButtons.push(new Button({
-        x: sidebarX + 20 + i * pbW,
-        y: contentY + 20,
-        width: pbW - 4,
-        height: 32,
+        x: layout.controlRect.x + 12 + i * pW,
+        y: layout.controlRect.y + 12,
+        width: pW - 4,
+        height: 28,
         text: p,
         accentColor: isSel ? Colors.cyan : Colors.panelBorder,
         callback: () => this.setPreset(p)
@@ -112,13 +112,13 @@ export class EscapeVelocityScene {
     }
 
     this.sliders = [];
-    let sY = contentY + 70;
-    const sW = sidebarW - 40;
+    let sY = layout.controlRect.y + 48;
+    const sW = layout.controlRect.width - 24;
 
     const vEscapeCalc = GravitationPhysics.calculateEscapeVelocity(this.planetMass, this.planetRadius, GRAVITATIONAL_CONSTANT);
 
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: Math.floor(vEscapeCalc.v_escape * 0.4),
@@ -131,11 +131,30 @@ export class EscapeVelocityScene {
       callback: (val) => { this.launchSpeed = val; this.reset(); }
     }));
 
-    this.sidebarRect = { x: sidebarX, y: contentY, w: sidebarW, h: contentH };
-    this.dataPanel.setRect(sidebarX, contentY + 160, sidebarW, contentH - 160);
+    if (this.selectedBody === 'CUSTOM') {
+      sY += 45;
+      const gSurface = (GRAVITATIONAL_CONSTANT * this.planetMass) / (this.planetRadius * this.planetRadius);
+      this.sliders.push(new Slider({
+        x: layout.controlRect.x + 12,
+        y: sY,
+        width: sW,
+        min: 0.5,
+        max: 25.0,
+        value: gSurface,
+        step: 0.1,
+        label: 'CUSTOM GRAVITY (g)',
+        unit: ' m/s²',
+        accentColor: Colors.cyan,
+        callback: (gVal) => {
+          this.planetMass = (gVal * this.planetRadius * this.planetRadius) / GRAVITATIONAL_CONSTANT;
+          this.reset();
+        }
+      }));
+    }
 
-    const mainW = sidebarX - 40;
-    this.simRect = { x: 20, y: contentY, w: mainW, h: contentH };
+    this.dataPanel.setRect(layout.dataRect.x, layout.dataRect.y, layout.dataRect.width, layout.dataRect.height);
+    this.simRect = layout.simRect;
+    this.controlRect = layout.controlRect;
   }
 
   handleInput(inputManager) {
@@ -151,14 +170,13 @@ export class EscapeVelocityScene {
   }
 
   update(dt) {
-    const effectiveDt = (this.isSlowMo ? dt * 0.25 : dt) * 15; // Scaled time for orbital distances
+    const effectiveDt = (this.isSlowMo ? dt * 0.25 : dt) * 15;
     this.controlBar.setRunning(this.isRunning);
 
     const vEscapeCalc = GravitationPhysics.calculateEscapeVelocity(this.planetMass, this.planetRadius, GRAVITATIONAL_CONSTANT);
 
     if (this.isRunning) {
       this.time += effectiveDt;
-      // Numerical integration of vertical escape: a = -GM / r^2
       const acc = -(GRAVITATIONAL_CONSTANT * this.planetMass) / (this.simRadius * this.simRadius);
       this.simSpeed += acc * effectiveDt;
       this.simRadius += this.simSpeed * effectiveDt;
@@ -185,11 +203,14 @@ export class EscapeVelocityScene {
     if (this.launchSpeed >= vEscapeCalc.v_escape * 1.005) trajType = 'HYPERBOLIC ESCAPE (E > 0)';
     else if (Math.abs(this.launchSpeed - vEscapeCalc.v_escape) <= vEscapeCalc.v_escape * 0.005) trajType = 'PARABOLIC ESCAPE (E = 0)';
 
+    const gSurface = (GRAVITATIONAL_CONSTANT * this.planetMass) / (this.planetRadius * this.planetRadius);
+
     this.dataPanel.setItems([
       { label: 'Planet Preset', value: this.selectedBody, unit: '', color: Colors.cyan },
-      { label: 'Surface Radius R', value: (this.planetRadius / 1e3).toFixed(0), unit: 'km', color: Colors.text },
+      { label: 'Surface Gravity (g)', value: gSurface.toFixed(2), unit: 'm/s²', color: Colors.yellow },
+      { label: 'Surface Radius (R)', value: (this.planetRadius / 1e3).toFixed(0), unit: 'km', color: Colors.text },
       { label: 'Escape Velocity (v_e)', value: vEscapeCalc.v_escape.toFixed(0), unit: 'm/s', color: Colors.green },
-      { label: 'Surface Orbit (v_o)', value: vEscapeCalc.v_orbital_surface.toFixed(0), unit: 'm/s', color: Colors.purple },
+      { label: 'Surface Orbit Speed (v_o)', value: vEscapeCalc.v_orbital_surface.toFixed(0), unit: 'm/s', color: Colors.purple },
       { label: 'Current Speed', value: this.simSpeed.toFixed(0), unit: 'm/s', color: Colors.yellow },
       { label: 'Trajectory Type', value: trajType, unit: '', color: this.launchSpeed >= vEscapeCalc.v_escape ? Colors.green : '#EF4444' }
     ]);
@@ -203,25 +224,30 @@ export class EscapeVelocityScene {
 
     this.controlBar.render(ctx);
 
-    if (this.sidebarRect) {
-      Renderer.drawPanel(ctx, this.sidebarRect.x, this.sidebarRect.y, this.sidebarRect.w, this.sidebarRect.h, {
+    if (this.controlRect) {
+      Renderer.drawPanel(ctx, this.controlRect.x, this.controlRect.y, this.controlRect.width, this.controlRect.height, {
         fill: Colors.panel,
         stroke: Colors.panelBorder
       });
+      Renderer.drawText(ctx, 'PLANET PRESETS & CONTROLS', this.controlRect.x + 12, this.controlRect.y + 6, {
+        fill: Colors.textMuted,
+        font: 'bold 10px "Segoe UI"'
+      });
       for (const b of this.presetButtons) b.render(ctx);
       for (const s of this.sliders) s.render(ctx);
-      this.dataPanel.render(ctx);
     }
 
+    this.dataPanel.render(ctx);
+
     if (this.simRect) {
-      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.w, this.simRect.h, {
+      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height, {
         fill: '#080D18',
         stroke: Colors.panelBorder
       });
 
-      const cx = this.simRect.x + this.simRect.w / 2;
-      const cy = this.simRect.y + this.simRect.h - 50;
-      const pRadiusPix = 70;
+      const cx = this.simRect.x + this.simRect.width / 2;
+      const cy = this.simRect.y + this.simRect.height - 40;
+      const pRadiusPix = Math.min(65, this.simRect.height * 0.22);
 
       // Planet Sphere
       Renderer.drawCircle(ctx, cx, cy, pRadiusPix, {
@@ -232,7 +258,7 @@ export class EscapeVelocityScene {
         glowBlur: 14
       });
 
-      Renderer.drawText(ctx, this.selectedBody, cx, cy - 20, {
+      Renderer.drawText(ctx, this.selectedBody, cx, cy - 10, {
         fill: Colors.text,
         font: 'bold 12px "Segoe UI"',
         align: 'center'
@@ -240,22 +266,23 @@ export class EscapeVelocityScene {
 
       // Rocket Probe Position
       const normAlt = (this.simRadius - this.planetRadius) / this.planetRadius;
-      const rocketY = (cy - pRadiusPix) - normAlt * 180;
+      const rocketY = (cy - pRadiusPix) - normAlt * (this.simRect.height * 0.45);
 
-      Renderer.drawCircle(ctx, cx, rocketY, 8, {
-        fill: Colors.yellow,
-        stroke: '#FFFFFF',
-        lineWidth: 2,
-        glowColor: Colors.yellow,
-        glowBlur: 10
-      });
-
-      // Velocity Vector Arrow
-      if (this.controlBar.showVectors && Math.abs(this.simSpeed) > 10) {
-        VectorRenderer.drawVector(ctx, cx, rocketY, 0, -this.simSpeed * 0.005, 1.0, {
-          color: this.simSpeed > 0 ? Colors.green : '#EF4444',
-          label: `v = ${this.simSpeed.toFixed(0)} m/s`
+      if (rocketY >= this.simRect.y + 10) {
+        Renderer.drawCircle(ctx, cx, rocketY, 7, {
+          fill: Colors.yellow,
+          stroke: '#FFFFFF',
+          lineWidth: 2,
+          glowColor: Colors.yellow,
+          glowBlur: 10
         });
+
+        if (this.controlBar.showVectors && Math.abs(this.simSpeed) > 10) {
+          VectorRenderer.drawVector(ctx, cx, rocketY, 0, -this.simSpeed * 0.005, 1.0, {
+            color: this.simSpeed > 0 ? Colors.green : '#EF4444',
+            label: `v = ${this.simSpeed.toFixed(0)} m/s`
+          });
+        }
       }
     }
 

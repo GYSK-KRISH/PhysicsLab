@@ -1,14 +1,18 @@
 // Universal Mechanics Laboratory UI Components, HUD, and Canvas Modals
+// Pure Canvas UI — ZERO DOM / HTML created
+
 import { Colors, Renderer } from './renderer.js';
 import { Button } from './ui.js';
 import { MechanicsProblemGenerator } from '../physics/mechanics/problems.js';
+import { TextEngine } from './textEngine.js';
+import { LayoutRect, LayoutRow } from './layout.js';
 
 export class MechanicsControlBar {
   constructor(options = {}) {
     this.x = options.x || 20;
     this.y = options.y || 10;
     this.width = options.width || 800;
-    this.height = options.height || 42;
+    this.height = options.height || 40;
 
     this.onPlay = options.onPlay || (() => {});
     this.onPause = options.onPause || (() => {});
@@ -35,149 +39,239 @@ export class MechanicsControlBar {
   }
 
   setRunning(running) {
-    this.isRunning = running;
-    this.rebuildButtons();
+    if (this.isRunning !== running) {
+      this.isRunning = running;
+      this.rebuildButtons();
+    }
   }
 
   setSlowMo(slowMo) {
-    this.isSlowMo = slowMo;
-    this.rebuildButtons();
+    if (this.isSlowMo !== slowMo) {
+      this.isSlowMo = slowMo;
+      this.rebuildButtons();
+    }
   }
 
-  setBounds(x, y, width) {
-    this.x = x;
-    this.y = y;
-    this.width = width;
+  setBounds(x, y, width, height) {
+    this.x = Math.round(x);
+    this.y = Math.round(y);
+    this.width = Math.max(100, Math.round(width));
+    if (height) this.height = Math.round(height);
     this.rebuildButtons();
   }
 
   rebuildButtons() {
     this.buttons = [];
-    let curX = this.x;
-    const btnH = 34;
+    const availW = Math.max(260, this.width);
+    const gap = 6;
 
-    // Back Button
-    this.buttons.push(new Button({
-      x: curX,
-      y: this.y,
-      width: 110,
-      height: btnH,
-      text: '← LAB MENU',
-      accentColor: Colors.purple,
-      callback: () => this.onBack()
-    }));
-    curX += 118;
+    if (availW >= 1000) {
+      // 1-Row Layout (Wide Desktop)
+      const btnH = Math.min(34, this.height);
+      const container = new LayoutRect(this.x, this.y, availW, btnH);
 
-    // Play / Pause Button
-    const playText = this.isRunning ? 'PAUSE' : 'START';
-    this.buttons.push(new Button({
-      x: curX,
-      y: this.y,
-      width: 95,
-      height: btnH,
-      text: playText,
-      accentColor: this.isRunning ? Colors.yellow : Colors.green,
-      badgeText: this.isRunning ? 'RUN' : 'STOP',
-      badgeColor: this.isRunning ? Colors.yellow : Colors.textDark,
-      callback: () => {
-        if (this.isRunning) {
-          this.onPause();
-        } else {
-          this.onPlay();
+      // 4 Groups: Nav (110px), Sim (Play 80, Reset 65, Slow 85, Step 38 = 268px), Visual (Vec 75, Grid 65 = 140px), Learn (Formula 80, Concept 75, Problem 75 = 230px)
+      const backBtn = new Button({
+        x: this.x,
+        y: this.y,
+        width: 105,
+        height: btnH,
+        text: '← LAB MENU',
+        accentColor: Colors.purple,
+        callback: () => this.onBack()
+      });
+      this.buttons.push(backBtn);
+
+      let curX = this.x + 115;
+
+      // SIMULATION GROUP
+      const playText = this.isRunning ? 'PAUSE' : 'PLAY';
+      const playBtn = new Button({
+        x: curX,
+        y: this.y,
+        width: 80,
+        height: btnH,
+        text: playText,
+        accentColor: this.isRunning ? Colors.yellow : Colors.green,
+        active: this.isRunning,
+        callback: () => { this.isRunning ? this.onPause() : this.onPlay(); }
+      });
+      this.buttons.push(playBtn);
+      curX += 80 + gap;
+
+      const resetBtn = new Button({
+        x: curX,
+        y: this.y,
+        width: 65,
+        height: btnH,
+        text: 'RESET',
+        accentColor: Colors.cyan,
+        callback: () => this.onReset()
+      });
+      this.buttons.push(resetBtn);
+      curX += 65 + gap;
+
+      const slowBtn = new Button({
+        x: curX,
+        y: this.y,
+        width: 86,
+        height: btnH,
+        text: 'SLOW-MO',
+        badgeText: this.isSlowMo ? '0.25x' : '',
+        badgeColor: Colors.cyan,
+        active: this.isSlowMo,
+        accentColor: Colors.cyan,
+        callback: () => this.onToggleSlowMo()
+      });
+      this.buttons.push(slowBtn);
+      curX += 86 + gap;
+
+      const stepBtn = new Button({
+        x: curX,
+        y: this.y,
+        width: 38,
+        height: btnH,
+        text: '▶|',
+        accentColor: Colors.textMuted,
+        callback: () => this.onStepForward()
+      });
+      this.buttons.push(stepBtn);
+      curX += 38 + gap * 2;
+
+      // VISUAL GROUP
+      const vecBtn = new Button({
+        x: curX,
+        y: this.y,
+        width: 78,
+        height: btnH,
+        text: 'VECTORS',
+        active: this.showVectors,
+        accentColor: this.showVectors ? Colors.cyan : Colors.panelBorder,
+        callback: () => {
+          this.showVectors = !this.showVectors;
+          this.onToggleVectors(this.showVectors);
+          this.rebuildButtons();
         }
-      }
-    }));
-    curX += 103;
+      });
+      this.buttons.push(vecBtn);
 
-    // Reset Button
-    this.buttons.push(new Button({
-      x: curX,
-      y: this.y,
-      width: 80,
-      height: btnH,
-      text: 'RESET',
-      accentColor: Colors.cyan,
-      callback: () => this.onReset()
-    }));
-    curX += 88;
+      // LEARNING GROUP (Aligned Right)
+      const learnW = 78;
+      let rightX = this.x + availW - learnW;
 
-    // Slow Mo Button (0.25x / 1.0x)
-    this.buttons.push(new Button({
-      x: curX,
-      y: this.y,
-      width: 100,
-      height: btnH,
-      text: 'SLOW-MO',
-      badgeText: this.isSlowMo ? '0.25x' : '1.0x',
-      badgeColor: this.isSlowMo ? Colors.cyan : Colors.textDark,
-      accentColor: Colors.cyan,
-      callback: () => this.onToggleSlowMo()
-    }));
-    curX += 108;
+      this.buttons.push(new Button({
+        x: rightX,
+        y: this.y,
+        width: learnW,
+        height: btnH,
+        text: 'PROBLEM',
+        accentColor: Colors.yellow,
+        callback: () => this.onOpenProblem()
+      }));
+      rightX -= learnW + gap;
 
-    // Step Forward
-    this.buttons.push(new Button({
-      x: curX,
-      y: this.y,
-      width: 44,
-      height: btnH,
-      text: '▶|',
-      accentColor: Colors.textMuted,
-      callback: () => this.onStepForward()
-    }));
-    curX += 52;
+      this.buttons.push(new Button({
+        x: rightX,
+        y: this.y,
+        width: learnW,
+        height: btnH,
+        text: 'CONCEPT',
+        accentColor: Colors.green,
+        callback: () => this.onOpenConcept()
+      }));
+      rightX -= learnW + gap;
 
-    // Vectors Toggle
-    this.buttons.push(new Button({
-      x: curX,
-      y: this.y,
-      width: 85,
-      height: btnH,
-      text: 'VECTORS',
-      accentColor: this.showVectors ? Colors.cyan : Colors.panelBorder,
-      callback: () => {
-        this.showVectors = !this.showVectors;
-        this.onToggleVectors(this.showVectors);
-        this.rebuildButtons();
-      }
-    }));
-    curX += 93;
+      this.buttons.push(new Button({
+        x: rightX,
+        y: this.y,
+        width: learnW,
+        height: btnH,
+        text: 'FORMULAS',
+        accentColor: Colors.purple,
+        callback: () => this.onOpenFormula()
+      }));
 
-    // Right-aligned Educational Tools: FORMULA, CONCEPT, PROBLEM
-    const rightBtnW = 92;
-    let rightX = this.x + this.width - rightBtnW;
+    } else if (availW >= 640) {
+      // 2-Row Layout (Medium Tablet / Narrow Desktop)
+      const btnH = 32;
+      let r1X = this.x;
+      const r1Y = this.y;
 
-    this.buttons.push(new Button({
-      x: rightX,
-      y: this.y,
-      width: rightBtnW,
-      height: btnH,
-      text: 'PROBLEM',
-      accentColor: Colors.yellow,
-      callback: () => this.onOpenProblem()
-    }));
-    rightX -= rightBtnW + 8;
+      const backW = 96;
+      this.buttons.push(new Button({
+        x: r1X, y: r1Y, width: backW, height: btnH, text: '← LAB MENU', accentColor: Colors.purple, callback: () => this.onBack()
+      }));
+      r1X += backW + gap;
 
-    this.buttons.push(new Button({
-      x: rightX,
-      y: this.y,
-      width: rightBtnW,
-      height: btnH,
-      text: 'CONCEPT',
-      accentColor: Colors.green,
-      callback: () => this.onOpenConcept()
-    }));
-    rightX -= rightBtnW + 8;
+      const playW = 76;
+      this.buttons.push(new Button({
+        x: r1X, y: r1Y, width: playW, height: btnH, text: this.isRunning ? 'PAUSE' : 'PLAY', accentColor: this.isRunning ? Colors.yellow : Colors.green, active: this.isRunning, callback: () => { this.isRunning ? this.onPause() : this.onPlay(); }
+      }));
+      r1X += playW + gap;
 
-    this.buttons.push(new Button({
-      x: rightX,
-      y: this.y,
-      width: rightBtnW,
-      height: btnH,
-      text: 'FORMULAS',
-      accentColor: Colors.purple,
-      callback: () => this.onOpenFormula()
-    }));
+      const resetW = 62;
+      this.buttons.push(new Button({
+        x: r1X, y: r1Y, width: resetW, height: btnH, text: 'RESET', accentColor: Colors.cyan, callback: () => this.onReset()
+      }));
+      r1X += resetW + gap;
+
+      const slowW = 82;
+      this.buttons.push(new Button({
+        x: r1X, y: r1Y, width: slowW, height: btnH, text: 'SLOW-MO', badgeText: this.isSlowMo ? '0.25x' : '', active: this.isSlowMo, accentColor: Colors.cyan, callback: () => this.onToggleSlowMo()
+      }));
+      r1X += slowW + gap;
+
+      this.buttons.push(new Button({
+        x: r1X, y: r1Y, width: 36, height: btnH, text: '▶|', accentColor: Colors.textMuted, callback: () => this.onStepForward()
+      }));
+
+      // Row 2: Visual & Learning
+      let r2X = this.x;
+      const r2Y = this.y + btnH + gap;
+
+      this.buttons.push(new Button({
+        x: r2X, y: r2Y, width: 78, height: btnH, text: 'VECTORS', active: this.showVectors, accentColor: this.showVectors ? Colors.cyan : Colors.panelBorder, callback: () => { this.showVectors = !this.showVectors; this.onToggleVectors(this.showVectors); this.rebuildButtons(); }
+      }));
+      r2X += 78 + gap;
+
+      const learnW = 78;
+      this.buttons.push(new Button({
+        x: r2X, y: r2Y, width: learnW, height: btnH, text: 'FORMULAS', accentColor: Colors.purple, callback: () => this.onOpenFormula()
+      }));
+      r2X += learnW + gap;
+
+      this.buttons.push(new Button({
+        x: r2X, y: r2Y, width: learnW, height: btnH, text: 'CONCEPT', accentColor: Colors.green, callback: () => this.onOpenConcept()
+      }));
+      r2X += learnW + gap;
+
+      this.buttons.push(new Button({
+        x: r2X, y: r2Y, width: learnW, height: btnH, text: 'PROBLEM', accentColor: Colors.yellow, callback: () => this.onOpenProblem()
+      }));
+
+    } else {
+      // 3-Row Layout (Compact Mobile)
+      const btnH = 30;
+      const btnW = Math.max(50, Math.floor((availW - gap * 2) / 3));
+      let curY = this.y;
+
+      // Row 1: Nav & Main Sim
+      this.buttons.push(new Button({ x: this.x, y: curY, width: btnW, height: btnH, text: '← MENU', accentColor: Colors.purple, callback: () => this.onBack() }));
+      this.buttons.push(new Button({ x: this.x + btnW + gap, y: curY, width: btnW, height: btnH, text: this.isRunning ? 'PAUSE' : 'PLAY', accentColor: this.isRunning ? Colors.yellow : Colors.green, active: this.isRunning, callback: () => { this.isRunning ? this.onPause() : this.onPlay(); } }));
+      this.buttons.push(new Button({ x: this.x + (btnW + gap) * 2, y: curY, width: btnW, height: btnH, text: 'RESET', accentColor: Colors.cyan, callback: () => this.onReset() }));
+      curY += btnH + gap;
+
+      // Row 2: Secondary Sim & Visual
+      this.buttons.push(new Button({ x: this.x, y: curY, width: btnW, height: btnH, text: 'SLOW', active: this.isSlowMo, accentColor: Colors.cyan, callback: () => this.onToggleSlowMo() }));
+      this.buttons.push(new Button({ x: this.x + btnW + gap, y: curY, width: btnW, height: btnH, text: '▶| STEP', accentColor: Colors.textMuted, callback: () => this.onStepForward() }));
+      this.buttons.push(new Button({ x: this.x + (btnW + gap) * 2, y: curY, width: btnW, height: btnH, text: 'VECTORS', active: this.showVectors, accentColor: this.showVectors ? Colors.cyan : Colors.panelBorder, callback: () => { this.showVectors = !this.showVectors; this.onToggleVectors(this.showVectors); this.rebuildButtons(); } }));
+      curY += btnH + gap;
+
+      // Row 3: Learning Modals
+      this.buttons.push(new Button({ x: this.x, y: curY, width: btnW, height: btnH, text: 'FORMULA', accentColor: Colors.purple, callback: () => this.onOpenFormula() }));
+      this.buttons.push(new Button({ x: this.x + btnW + gap, y: curY, width: btnW, height: btnH, text: 'CONCEPT', accentColor: Colors.green, callback: () => this.onOpenConcept() }));
+      this.buttons.push(new Button({ x: this.x + (btnW + gap) * 2, y: curY, width: btnW, height: btnH, text: 'PROBLEM', accentColor: Colors.yellow, callback: () => this.onOpenProblem() }));
+    }
   }
 
   update(dt, inputManager) {
@@ -204,55 +298,71 @@ export class MechanicsDataPanel {
   }
 
   setRect(x, y, width, height) {
-    this.x = x;
-    this.y = y;
-    this.width = width;
-    this.height = height;
+    this.x = Math.round(x);
+    this.y = Math.round(y);
+    this.width = Math.max(120, Math.round(width));
+    this.height = Math.max(60, Math.round(height));
+    return this;
   }
 
   setItems(items) {
-    this.items = items;
+    this.items = items || [];
+  }
+
+  setMetrics(items) {
+    this.setItems(items);
   }
 
   render(ctx) {
     ctx.save();
 
     Renderer.drawPanel(ctx, this.x, this.y, this.width, this.height, {
-      fill: '#0D131E',
+      fill: '#090E18',
       stroke: Colors.panelBorder,
-      radius: 10
+      radius: 8
     });
 
-    // Panel Header Accent
-    Renderer.drawRoundedRect(ctx, this.x + 12, this.y + 12, 4, 16, 2, { fill: Colors.cyan });
-    Renderer.drawText(ctx, this.title, this.x + 22, this.y + 20, {
+    // Panel Header
+    Renderer.drawRoundedRect(ctx, this.x + 10, this.y + 8, 3, 13, 1.5, { fill: Colors.cyan });
+    Renderer.drawText(ctx, this.title, this.x + 18, this.y + 14, {
       fill: Colors.text,
-      font: 'bold 12px "Segoe UI", Roboto, sans-serif',
-      baseline: 'middle'
+      font: 'bold 11px "Segoe UI", Roboto, sans-serif',
+      baseline: 'middle',
+      maxWidth: this.width - 28
     });
 
-    Renderer.drawLine(ctx, this.x + 12, this.y + 36, this.x + this.width - 12, this.y + 36, {
-      stroke: 'rgba(255, 255, 255, 0.06)',
+    Renderer.drawLine(ctx, this.x + 8, this.y + 25, this.x + this.width - 8, this.y + 25, {
+      stroke: 'rgba(255, 255, 255, 0.05)',
       lineWidth: 1
     });
 
-    // Data Row Items
-    let rowY = this.y + 52;
-    const rowH = 26;
+    // Calculate row height based on available vertical space
+    const headerH = 28;
+    const availH = this.height - headerH - 6;
+    const rowCount = Math.max(1, this.items.length);
+    const rowH = Math.min(22, Math.max(16, Math.floor(availH / rowCount)));
+
+    let rowY = this.y + headerH + rowH / 2;
 
     for (const item of this.items) {
-      Renderer.drawText(ctx, item.label, this.x + 16, rowY, {
+      if (rowY + rowH / 2 > this.y + this.height - 4) break;
+
+      const labelMaxW = Math.max(20, this.width * 0.52);
+      Renderer.drawText(ctx, item.label, this.x + 10, rowY, {
         fill: Colors.textMuted,
-        font: '12px "Segoe UI", Roboto, sans-serif',
-        baseline: 'middle'
+        font: '10px "Segoe UI", Roboto, sans-serif',
+        baseline: 'middle',
+        maxWidth: labelMaxW
       });
 
       const valStr = `${item.value}${item.unit ? ' ' + item.unit : ''}`;
-      Renderer.drawText(ctx, valStr, this.x + this.width - 16, rowY, {
+      const valMaxW = Math.max(20, this.width * 0.44);
+      Renderer.drawText(ctx, valStr, this.x + this.width - 10, rowY, {
         fill: item.color || Colors.cyan,
-        font: 'bold 13px "Segoe UI", Roboto, sans-serif',
+        font: 'bold 11px "Segoe UI", Roboto, sans-serif',
         align: 'right',
-        baseline: 'middle'
+        baseline: 'middle',
+        maxWidth: valMaxW
       });
 
       rowY += rowH;
@@ -269,25 +379,26 @@ export class MechanicsModalOverlay {
     this.title = '';
     this.content = null;
 
-    // Numerical keypad state for canvas input
     this.keypadInput = '';
     this.problemResult = null;
     this.currentProblem = null;
-    this.closeBtn = null;
     this.buttons = [];
+    this.scrollOffset = 0;
   }
 
   openFormula(title, formulas) {
     this.mode = 'FORMULA';
     this.title = `${title} — FORMULAS`;
-    this.content = formulas; // Array of { name, formula, desc }
+    this.content = formulas || [];
+    this.scrollOffset = 0;
     this.isOpen = true;
   }
 
   openConcept(title, concept) {
     this.mode = 'CONCEPT';
-    this.title = `${title} — CONCEPT`;
-    this.content = concept; // { what, how, keyIdea }
+    this.title = `${title} — CONCEPT & THEORY`;
+    this.content = concept || {};
+    this.scrollOffset = 0;
     this.isOpen = true;
   }
 
@@ -297,6 +408,7 @@ export class MechanicsModalOverlay {
     this.currentProblem = MechanicsProblemGenerator.generateRandomProblem(problemCategory);
     this.keypadInput = '';
     this.problemResult = null;
+    this.scrollOffset = 0;
     this.isOpen = true;
   }
 
@@ -317,9 +429,9 @@ export class MechanicsModalOverlay {
         this.problemResult = MechanicsProblemGenerator.checkAnswer(this.currentProblem, this.keypadInput);
       }
     } else if (val === 'NEW_PROBLEM') {
-      this.openProblem();
+      this.openProblem(this.currentProblem?.category);
     } else {
-      if (this.keypadInput.length < 10) {
+      if (this.keypadInput.length < 12) {
         if (val === '.' && this.keypadInput.includes('.')) return;
         if (val === '-' && this.keypadInput.length > 0) return;
         this.keypadInput += val;
@@ -330,13 +442,11 @@ export class MechanicsModalOverlay {
 
   update(dt, inputManager) {
     if (!this.isOpen || !inputManager) return;
-    const pointer = inputManager.pointer;
 
     for (const btn of this.buttons) {
       btn.update(dt, inputManager);
     }
 
-    // Keyboard support for numeric pad when modal is open
     if (this.mode === 'PROBLEM') {
       const numKeys = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'Period', 'Minus'];
       for (const k of numKeys) {
@@ -363,135 +473,135 @@ export class MechanicsModalOverlay {
 
     ctx.save();
 
-    // Backdrop shadow / dim
-    ctx.fillStyle = 'rgba(4, 6, 12, 0.85)';
+    // Backdrop shadow
+    ctx.fillStyle = 'rgba(4, 6, 12, 0.88)';
     ctx.fillRect(0, 0, width, height);
 
-    const modalW = Math.min(680, width - 40);
-    const modalH = Math.min(520, height - 60);
-    const modalX = (width - modalW) / 2;
-    const modalY = (height - modalH) / 2;
+    const modalW = Math.min(680, width - 24);
+    const modalH = Math.min(520, height - 32);
+    const modalX = Math.round((width - modalW) / 2);
+    const modalY = Math.round((height - modalH) / 2);
 
     Renderer.drawPanel(ctx, modalX, modalY, modalW, modalH, {
-      fill: Colors.panel,
+      fill: '#0B101D',
       stroke: Colors.cyan,
       lineWidth: 1.5,
       glowColor: Colors.cyan,
       glowBlur: 14,
-      radius: 14
+      radius: 12
     });
 
-    // Header
-    Renderer.drawText(ctx, this.title, modalX + 24, modalY + 30, {
+    // Title
+    Renderer.drawText(ctx, this.title, modalX + 16, modalY + 24, {
       fill: Colors.cyan,
-      font: 'bold 18px "Segoe UI", Roboto, sans-serif',
-      baseline: 'middle'
+      font: 'bold 14px "Segoe UI", Roboto, sans-serif',
+      baseline: 'middle',
+      maxWidth: modalW - 100
     });
 
-    // Close Button on Canvas
     this.buttons = [];
     const closeBtn = new Button({
-      x: modalX + modalW - 95,
-      y: modalY + 14,
-      width: 75,
-      height: 32,
+      x: modalX + modalW - 75,
+      y: modalY + 10,
+      width: 65,
+      height: 28,
       text: 'CLOSE',
       accentColor: Colors.purple,
       callback: () => this.close()
     });
     this.buttons.push(closeBtn);
 
-    Renderer.drawLine(ctx, modalX + 20, modalY + 54, modalX + modalW - 20, modalY + 54, {
+    Renderer.drawLine(ctx, modalX + 12, modalY + 44, modalX + modalW - 12, modalY + 44, {
       stroke: Colors.panelBorder,
       lineWidth: 1
     });
 
-    // Content Rendering
-    const contentY = modalY + 74;
+    const contentY = modalY + 54;
+    const contentW = modalW - 32;
 
     if (this.mode === 'FORMULA') {
       let fY = contentY;
       for (const item of (this.content || [])) {
-        Renderer.drawText(ctx, item.name, modalX + 24, fY, {
+        if (fY + 60 > modalY + modalH - 10) break;
+
+        Renderer.drawText(ctx, item.name, modalX + 16, fY, {
           fill: Colors.yellow,
-          font: 'bold 14px "Segoe UI", Roboto, sans-serif'
+          font: 'bold 12px "Segoe UI", Roboto, sans-serif',
+          maxWidth: contentW
         });
 
-        Renderer.drawRoundedRect(ctx, modalX + 24, fY + 8, modalW - 48, 38, 6, {
-          fill: '#080D18',
-          stroke: 'rgba(94, 231, 255, 0.2)'
+        Renderer.drawRoundedRect(ctx, modalX + 16, fY + 4, contentW, 30, 5, {
+          fill: '#060A14',
+          stroke: 'rgba(94, 231, 255, 0.25)'
         });
 
-        Renderer.drawText(ctx, item.formula, modalX + 36, fY + 28, {
+        Renderer.drawText(ctx, item.formula, modalX + 24, fY + 19, {
           fill: Colors.cyan,
-          font: 'bold 16px "Courier New", monospace',
-          baseline: 'middle'
+          font: 'bold 13px "Courier New", monospace',
+          baseline: 'middle',
+          maxWidth: contentW - 16
         });
 
         if (item.desc) {
-          Renderer.drawText(ctx, item.desc, modalX + 24, fY + 58, {
+          TextEngine.drawWrappedText(ctx, item.desc, modalX + 16, fY + 38, contentW, {
             fill: Colors.textMuted,
-            font: '12px "Segoe UI", Roboto, sans-serif'
+            font: '10px "Segoe UI", Roboto, sans-serif',
+            lineGap: 2
           });
         }
-        fY += 78;
+        fY += 64;
       }
     } else if (this.mode === 'CONCEPT') {
       const c = this.content || {};
       let cY = contentY;
 
-      // WHAT IS IT?
-      Renderer.drawText(ctx, 'WHAT IS IT?', modalX + 24, cY, { fill: Colors.cyan, font: 'bold 13px "Segoe UI"' });
-      Renderer.drawText(ctx, c.what || '', modalX + 24, cY + 20, { fill: Colors.text, font: '13px "Segoe UI"' });
-      cY += 64;
+      Renderer.drawText(ctx, 'WHAT IS IT?', modalX + 16, cY, { fill: Colors.cyan, font: 'bold 11px "Segoe UI"' });
+      const h1 = TextEngine.drawWrappedText(ctx, c.what || '', modalX + 16, cY + 14, contentW, { fill: Colors.text, font: '11px "Segoe UI"' });
+      cY += Math.max(38, h1 + 20);
 
-      // HOW DOES IT WORK?
-      Renderer.drawText(ctx, 'HOW DOES IT WORK?', modalX + 24, cY, { fill: Colors.green, font: 'bold 13px "Segoe UI"' });
-      Renderer.drawText(ctx, c.how || '', modalX + 24, cY + 20, { fill: Colors.text, font: '13px "Segoe UI"' });
-      cY += 64;
+      Renderer.drawText(ctx, 'HOW DOES IT WORK?', modalX + 16, cY, { fill: Colors.green, font: 'bold 11px "Segoe UI"' });
+      const h2 = TextEngine.drawWrappedText(ctx, c.how || '', modalX + 16, cY + 14, contentW, { fill: Colors.text, font: '11px "Segoe UI"' });
+      cY += Math.max(38, h2 + 20);
 
-      // KEY IDEA
-      Renderer.drawText(ctx, 'KEY IDEA & TAKEAWAY', modalX + 24, cY, { fill: Colors.yellow, font: 'bold 13px "Segoe UI"' });
-      Renderer.drawText(ctx, c.keyIdea || '', modalX + 24, cY + 20, { fill: Colors.text, font: 'italic 13px "Segoe UI"' });
+      Renderer.drawText(ctx, 'KEY TAKEAWAY', modalX + 16, cY, { fill: Colors.yellow, font: 'bold 11px "Segoe UI"' });
+      TextEngine.drawWrappedText(ctx, c.keyIdea || '', modalX + 16, cY + 14, contentW, { fill: Colors.text, font: 'italic 11px "Segoe UI"' });
     } else if (this.mode === 'PROBLEM') {
       if (this.currentProblem) {
-        // Question Box
-        Renderer.drawRoundedRect(ctx, modalX + 24, contentY, modalW - 48, 65, 8, {
-          fill: '#090E1A',
+        Renderer.drawRoundedRect(ctx, modalX + 16, contentY, contentW, 50, 6, {
+          fill: '#080C18',
           stroke: Colors.panelBorder
         });
 
-        Renderer.drawText(ctx, `[${this.currentProblem.category}]`, modalX + 36, contentY + 16, {
+        Renderer.drawText(ctx, `[${this.currentProblem.category}]`, modalX + 24, contentY + 10, {
           fill: Colors.yellow,
-          font: 'bold 11px "Segoe UI", Roboto, sans-serif'
+          font: 'bold 10px "Segoe UI", Roboto, sans-serif'
         });
 
-        Renderer.drawText(ctx, this.currentProblem.question, modalX + 36, contentY + 38, {
+        TextEngine.drawWrappedText(ctx, this.currentProblem.question, modalX + 24, contentY + 24, contentW - 16, {
           fill: Colors.text,
-          font: '13px "Segoe UI", Roboto, sans-serif'
+          font: '11px "Segoe UI", Roboto, sans-serif'
         });
 
-        // Numeric Input Readout Box
-        const inputY = contentY + 80;
-        Renderer.drawRoundedRect(ctx, modalX + 24, inputY, modalW - 48, 44, 8, {
-          fill: '#050811',
+        const inputY = contentY + 58;
+        Renderer.drawRoundedRect(ctx, modalX + 16, inputY, contentW, 34, 6, {
+          fill: '#040710',
           stroke: this.problemResult ? (this.problemResult.isCorrect ? Colors.green : '#EF4444') : Colors.cyan,
           lineWidth: 1.5
         });
 
         const displayTxt = (this.keypadInput || '0') + ` ${this.currentProblem.unit}`;
-        Renderer.drawText(ctx, displayTxt, modalX + modalW - 40, inputY + 22, {
+        Renderer.drawText(ctx, displayTxt, modalX + modalW - 28, inputY + 17, {
           fill: Colors.cyan,
-          font: 'bold 20px "Courier New", monospace',
+          font: 'bold 16px "Courier New", monospace',
           align: 'right',
-          baseline: 'middle'
+          baseline: 'middle',
+          maxWidth: contentW - 16
         });
 
-        // Canvas Keypad Grid (3 columns: 1-9, ., 0, -)
-        const padX = modalX + 30;
-        const padY = inputY + 54;
-        const padKeyW = 60;
-        const padKeyH = 34;
+        const padX = modalX + 20;
+        const padY = inputY + 42;
+        const padKeyW = Math.min(56, Math.floor((contentW - 130) / 3));
+        const padKeyH = 28;
         const keys = [
           ['1', '2', '3'],
           ['4', '5', '6'],
@@ -503,8 +613,8 @@ export class MechanicsModalOverlay {
           for (let c = 0; c < keys[r].length; c++) {
             const val = keys[r][c];
             const kBtn = new Button({
-              x: padX + c * (padKeyW + 8),
-              y: padY + r * (padKeyH + 6),
+              x: padX + c * (padKeyW + 5),
+              y: padY + r * (padKeyH + 5),
               width: padKeyW,
               height: padKeyH,
               text: val,
@@ -515,81 +625,57 @@ export class MechanicsModalOverlay {
           }
         }
 
-        // Action Keys: CLEAR, BACK, SUBMIT, NEW PROBLEM
-        const actX = padX + 3 * (padKeyW + 8) + 12;
-        const actW = 120;
+        const actX = padX + 3 * (padKeyW + 5) + 8;
+        const actW = Math.max(80, modalX + modalW - actX - 20);
 
         this.buttons.push(new Button({
-          x: actX,
-          y: padY,
-          width: actW,
-          height: padKeyH,
-          text: 'CLEAR',
-          accentColor: Colors.textMuted,
+          x: actX, y: padY, width: actW, height: padKeyH,
+          text: 'CLEAR', accentColor: Colors.textMuted,
           callback: () => this.handleKeypadClick('CLEAR')
         }));
 
         this.buttons.push(new Button({
-          x: actX,
-          y: padY + (padKeyH + 6),
-          width: actW,
-          height: padKeyH,
-          text: '⌫ BACK',
-          accentColor: Colors.textMuted,
+          x: actX, y: padY + (padKeyH + 5), width: actW, height: padKeyH,
+          text: '⌫ BACK', accentColor: Colors.textMuted,
           callback: () => this.handleKeypadClick('BACK')
         }));
 
         this.buttons.push(new Button({
-          x: actX,
-          y: padY + 2 * (padKeyH + 6),
-          width: actW,
-          height: padKeyH,
-          text: 'CALCULATE',
-          accentColor: Colors.green,
+          x: actX, y: padY + 2 * (padKeyH + 5), width: actW, height: padKeyH,
+          text: 'SUBMIT', accentColor: Colors.green,
           callback: () => this.handleKeypadClick('SUBMIT')
         }));
 
         this.buttons.push(new Button({
-          x: actX,
-          y: padY + 3 * (padKeyH + 6),
-          width: actW,
-          height: padKeyH,
-          text: 'NEW PROBLEM',
-          accentColor: Colors.purple,
+          x: actX, y: padY + 3 * (padKeyH + 5), width: actW, height: padKeyH,
+          text: 'NEW PROB', accentColor: Colors.purple,
           callback: () => this.handleKeypadClick('NEW_PROBLEM')
         }));
 
-        // Result Banner
         if (this.problemResult) {
-          const resX = actX + actW + 16;
-          const resW = modalW - (resX - modalX) - 24;
+          const resY = padY + 4 * (padKeyH + 5) + 6;
           const isOk = this.problemResult.isCorrect;
 
-          Renderer.drawRoundedRect(ctx, resX, padY, resW, 150, 8, {
-            fill: isOk ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+          Renderer.drawRoundedRect(ctx, modalX + 16, resY, contentW, 40, 6, {
+            fill: isOk ? 'rgba(74, 222, 128, 0.12)' : 'rgba(239, 68, 68, 0.12)',
             stroke: isOk ? Colors.green : '#EF4444',
             lineWidth: 1.5
           });
 
-          Renderer.drawText(ctx, isOk ? '✓ CORRECT!' : '✗ TRY AGAIN', resX + 12, padY + 22, {
+          Renderer.drawText(ctx, isOk ? '✓ CORRECT!' : '✗ INCORRECT', modalX + 24, resY + 12, {
             fill: isOk ? Colors.green : '#EF4444',
-            font: 'bold 15px "Segoe UI", Roboto, sans-serif'
+            font: 'bold 12px "Segoe UI", Roboto, sans-serif'
           });
 
-          Renderer.drawText(ctx, `Expected: ${this.currentProblem.correctAnswer.toFixed(2)} ${this.currentProblem.unit}`, resX + 12, padY + 46, {
+          Renderer.drawText(ctx, `Expected: ${this.currentProblem.correctAnswer.toFixed(2)} ${this.currentProblem.unit}  |  Formula: ${this.currentProblem.formula}`, modalX + 24, resY + 26, {
             fill: Colors.textMuted,
-            font: '12px "Segoe UI", Roboto, sans-serif'
-          });
-
-          Renderer.drawText(ctx, `Formula: ${this.currentProblem.formula}`, resX + 12, padY + 70, {
-            fill: Colors.yellow,
-            font: '11px "Courier New", monospace'
+            font: '10px "Segoe UI", Roboto, sans-serif',
+            maxWidth: contentW - 16
           });
         }
       }
     }
 
-    // Render overlay buttons
     for (const btn of this.buttons) {
       btn.render(ctx);
     }

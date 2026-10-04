@@ -1,6 +1,7 @@
 // Circular Motion Laboratory Scene for PhysicsLab
 import { Colors, Renderer } from '../../engine/renderer.js';
 import { Slider } from '../../engine/ui.js';
+import { LayoutEngine } from '../../engine/layout.js';
 import { CircularMotionPhysics } from '../../physics/mechanics/circularMotion.js';
 import { VectorRenderer } from '../../engine/vectorRenderer.js';
 import { MechanicsControlBar, MechanicsDataPanel, MechanicsModalOverlay } from '../../engine/mechanicsUI.js';
@@ -47,19 +48,16 @@ export class CircularMotionScene {
 
   rebuildUI() {
     const { width, height } = this.canvasEngine.getBounds();
-    this.controlBar.setBounds(20, 12, width - 40);
+    const layout = LayoutEngine.calculateExperimentLayout(width, height);
 
-    const sidebarW = Math.max(260, Math.min(320, width * 0.28));
-    const sidebarX = width - sidebarW - 20;
-    const contentY = 64;
-    const contentH = height - contentY - 20;
+    this.controlBar.setBounds(layout.toolbarRect.x, layout.toolbarRect.y, layout.toolbarRect.width);
 
     this.sliders = [];
-    let sY = contentY + 20;
-    const sW = sidebarW - 40;
+    let sY = layout.controlRect.y + 16;
+    const sW = layout.controlRect.width - 24;
 
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 1,
@@ -72,9 +70,9 @@ export class CircularMotionScene {
       callback: (val) => this.physics.setParameters(val, this.physics.mass, this.physics.speed)
     }));
 
-    sY += 55;
+    sY += 46;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 1,
@@ -87,9 +85,9 @@ export class CircularMotionScene {
       callback: (val) => this.physics.setParameters(this.physics.radius, this.physics.mass, val)
     }));
 
-    sY += 55;
+    sY += 46;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 0.5,
@@ -102,11 +100,10 @@ export class CircularMotionScene {
       callback: (val) => this.physics.setParameters(this.physics.radius, val, this.physics.speed)
     }));
 
-    this.sidebarRect = { x: sidebarX, y: contentY, w: sidebarW, h: contentH };
-    this.dataPanel.setRect(sidebarX, contentY + 200, sidebarW, contentH - 200);
-
-    const mainW = sidebarX - 40;
-    this.simRect = { x: 20, y: contentY, w: mainW, h: contentH };
+    this.simRect = layout.simRect;
+    this.controlRect = layout.controlRect;
+    this.dataRect = layout.dataRect;
+    this.dataPanel.setRect(layout.dataRect.x, layout.dataRect.y, layout.dataRect.width, layout.dataRect.height);
   }
 
   handleInput(inputManager) {
@@ -153,35 +150,46 @@ export class CircularMotionScene {
 
     this.controlBar.render(ctx);
 
-    if (this.sidebarRect) {
-      Renderer.drawPanel(ctx, this.sidebarRect.x, this.sidebarRect.y, this.sidebarRect.w, this.sidebarRect.h, {
+    if (this.controlRect) {
+      Renderer.drawPanel(ctx, this.controlRect.x, this.controlRect.y, this.controlRect.width, this.controlRect.height, {
         fill: Colors.panel,
         stroke: Colors.panelBorder
       });
+      Renderer.drawText(ctx, 'CIRCULAR CONTROLS', this.controlRect.x + 14, this.controlRect.y + 14, {
+        fill: Colors.textMuted,
+        font: 'bold 11px "Segoe UI"'
+      });
       for (const s of this.sliders) s.render(ctx);
+    }
+
+    if (this.dataRect) {
       this.dataPanel.render(ctx);
     }
 
     if (this.simRect) {
-      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.w, this.simRect.h, {
+      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height, {
         fill: '#090E1A',
         stroke: Colors.panelBorder
       });
 
-      const centerX = this.simRect.x + this.simRect.w / 2;
-      const centerY = this.simRect.y + this.simRect.h / 2;
-      const scale = 32.0; // 32 px per meter
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height);
+      ctx.clip();
+
+      const centerX = this.simRect.x + this.simRect.width / 2;
+      const centerY = this.simRect.y + this.simRect.height / 2;
+      const scale = Math.min(28, (Math.min(this.simRect.width, this.simRect.height) * 0.38) / (this.physics.radius || 1));
       const rPixels = this.physics.radius * scale;
 
       // Circular Path Outline
-      ctx.save();
       ctx.strokeStyle = 'rgba(94, 231, 255, 0.2)';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.arc(centerX, centerY, rPixels, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.restore();
+      ctx.setLineDash([]);
 
       // Center Anchor Point
       Renderer.drawCircle(ctx, centerX, centerY, 6, { fill: Colors.purple });
@@ -215,8 +223,8 @@ export class CircularMotionScene {
       // Dynamic Vectors
       if (this.controlBar.showVectors) {
         // Tangential Velocity Vector (Cyan)
-        const vx = -Math.sin(this.physics.angleRad) * this.physics.speed * 4.0;
-        const vy = Math.cos(this.physics.angleRad) * this.physics.speed * 4.0;
+        const vx = -Math.sin(this.physics.angleRad) * this.physics.speed * 3.0;
+        const vy = Math.cos(this.physics.angleRad) * this.physics.speed * 3.0;
         VectorRenderer.drawVector(ctx, objX, objY, vx, vy, 1.0, {
           color: Colors.cyan,
           label: `v = ${this.physics.speed.toFixed(1)} m/s`,
@@ -224,14 +232,16 @@ export class CircularMotionScene {
         });
 
         // Centripetal Acceleration / Force Vector (pointing to center)
-        const ax = -Math.cos(this.physics.angleRad) * Math.min(60, this.physics.centripetalAcc * 1.5);
-        const ay = -Math.sin(this.physics.angleRad) * Math.min(60, this.physics.centripetalAcc * 1.5);
+        const ax = -Math.cos(this.physics.angleRad) * Math.min(50, this.physics.centripetalAcc * 1.5);
+        const ay = -Math.sin(this.physics.angleRad) * Math.min(50, this.physics.centripetalAcc * 1.5);
         VectorRenderer.drawVector(ctx, objX, objY, ax, ay, 1.0, {
           color: '#EF4444',
           label: `F_c = ${this.physics.centripetalForce.toFixed(0)}N`,
           glow: true
         });
       }
+
+      ctx.restore();
     }
 
     this.modal.render(ctx, width, height);
