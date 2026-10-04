@@ -1,0 +1,10 @@
+{
+  "name": "physicslab",
+  "version": "1.0.0",
+  "description": "Hack Club Tagless Physics Lab Canvas Application",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
