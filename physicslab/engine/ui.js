@@ -140,17 +140,26 @@ export class Button {
     }
 
     // Text & Badge measurements
-    const leftMargin = this.align === 'left' ? 14 : 6;
-    const rightMargin = this.badgeText ? (Math.min(60, this.width * 0.25) + 8) : 6;
+    let badgeW = 0;
+    if (this.badgeText) {
+      ctx.save();
+      ctx.font = '700 9px "Segoe UI", Roboto, sans-serif';
+      const badgeTextW = ctx.measureText(String(this.badgeText)).width;
+      badgeW = Math.max(18, Math.min(65, badgeTextW + 8));
+      ctx.restore();
+    }
+
+    const leftMargin = this.align === 'left' ? 12 : 4;
+    const rightMargin = this.badgeText ? (badgeW + 6) : 4;
     const availableTextW = Math.max(10, this.width - leftMargin - rightMargin);
 
-    // Auto-fit font size to ensure text never escapes bounds
+    // Auto-fit font size to ensure text never escapes bounds or overlaps badge
     const fitted = TextEngine.fitFontSize(
       ctx,
       this.text,
       availableTextW,
       this.fontSize,
-      Math.max(9, this.fontSize - 4),
+      Math.max(7, this.fontSize - 5),
       '"Segoe UI", Roboto, sans-serif',
       '600'
     );
@@ -159,10 +168,10 @@ export class Button {
     let textAlign = 'left';
 
     if (this.align === 'center') {
-      textX = this.x + (this.badgeText ? (this.width - rightMargin) / 2 : this.width / 2);
+      textX = this.x + leftMargin + availableTextW / 2;
       textAlign = 'center';
     } else if (this.align === 'right') {
-      textX = this.x + this.width - rightMargin;
+      textX = this.x + leftMargin + availableTextW;
       textAlign = 'right';
     }
 
@@ -197,14 +206,10 @@ export class Button {
     }
 
     // Badge Render
-    if (this.badgeText && this.width >= 90) {
-      const badgePaddingX = 4;
-      const badgeH = Math.min(18, Math.max(14, this.height - 12));
-      ctx.font = '700 9px "Segoe UI", Roboto, sans-serif';
-      const badgeTextW = ctx.measureText(this.badgeText).width;
-      const badgeW = Math.min(54, badgeTextW + badgePaddingX * 2);
-      const badgeX = this.x + this.width - badgeW - 6;
-      const badgeY = renderY + (this.height - badgeH) / 2;
+    if (this.badgeText && this.width >= 40) {
+      const badgeH = Math.min(18, Math.max(14, this.height - 10));
+      const badgeX = Math.round(this.x + this.width - badgeW - 3);
+      const badgeY = Math.round(renderY + (this.height - badgeH) / 2);
 
       Renderer.drawRoundedRect(ctx, badgeX, badgeY, badgeW, badgeH, 3, {
         fill: this.disabled ? '#121824' : 'rgba(94, 231, 255, 0.12)',
@@ -212,7 +217,7 @@ export class Button {
         lineWidth: 1
       });
 
-      Renderer.drawText(ctx, this.badgeText, badgeX + badgeW / 2, badgeY + badgeH / 2, {
+      Renderer.drawText(ctx, String(this.badgeText), badgeX + badgeW / 2, badgeY + badgeH / 2, {
         fill: this.disabled ? Colors.textDark : this.badgeColor,
         font: '700 9px "Segoe UI", Roboto, sans-serif',
         align: 'center',

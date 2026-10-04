@@ -4,6 +4,7 @@ import { Button, Slider } from '../../engine/ui.js';
 import { WaveLabPhysics } from '../../physics/mechanics/waves.js';
 import { GraphRenderer } from '../../engine/graphRenderer.js';
 import { MechanicsControlBar, MechanicsDataPanel, MechanicsModalOverlay } from '../../engine/mechanicsUI.js';
+import { LayoutEngine } from '../../engine/layout.js';
 
 export class WaveLabScene {
   constructor() {
@@ -64,53 +65,42 @@ export class WaveLabScene {
 
   rebuildUI() {
     const { width, height } = this.canvasEngine.getBounds();
-    this.controlBar.setBounds(20, 12, width - 40);
+    const layout = LayoutEngine.calculateExperimentLayout(width, height);
 
-    const sidebarW = Math.max(260, Math.min(320, width * 0.28));
-    const sidebarX = width - sidebarW - 20;
-    const contentY = 64;
-    const contentH = height - contentY - 20;
+    this.controlBar.setBounds(layout.toolbarRect.x, layout.toolbarRect.y, layout.toolbarRect.width);
+
+    this.typeButtons = [];
+    const types = ['TRANSVERSE', 'LONGITUDINAL'];
+    const tbW = (layout.controlRect.width - 24) / 2;
+
+    for (let i = 0; i < types.length; i++) {
+      const t = types[i];
+      const isSel = this.physics.waveType === t;
+      this.typeButtons.push(new Button({
+        x: layout.controlRect.x + 12 + i * tbW,
+        y: layout.controlRect.y + 10,
+        width: tbW - 4,
+        height: 28,
+        text: t,
+        accentColor: isSel ? Colors.cyan : Colors.panelBorder,
+        callback: () => {
+          this.physics.waveType = t;
+          this.rebuildUI();
+        }
+      }));
+    }
 
     this.sliders = [];
-    this.typeButtons = [];
-    let sY = contentY + 15;
-    const sW = sidebarW - 40;
+    let sY = layout.controlRect.y + 44;
+    const sW = layout.controlRect.width - 24;
 
-    const btnW = (sW - 10) / 2;
-    this.typeButtons.push(new Button({
-      x: sidebarX + 20,
-      y: sY,
-      width: btnW,
-      height: 28,
-      text: 'TRANSVERSE',
-      color: this.physics.waveType === 'TRANSVERSE' ? '#0284C7' : '#334155',
-      callback: () => {
-        this.physics.waveType = 'TRANSVERSE';
-        this.updateButtonColors();
-      }
-    }));
-
-    this.typeButtons.push(new Button({
-      x: sidebarX + 20 + btnW + 10,
-      y: sY,
-      width: btnW,
-      height: 28,
-      text: 'LONGITUDINAL',
-      color: this.physics.waveType === 'LONGITUDINAL' ? '#0284C7' : '#334155',
-      callback: () => {
-        this.physics.waveType = 'LONGITUDINAL';
-        this.updateButtonColors();
-      }
-    }));
-
-    sY += 45;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 0.5,
       max: 5.0,
-      value: this.physics.amplitude,
+      value: this.physics.amplitude || 2.5,
       step: 0.2,
       label: 'AMPLITUDE (A)',
       unit: ' m',
@@ -118,52 +108,40 @@ export class WaveLabScene {
       callback: (val) => this.physics.setParameters(val, this.physics.frequency, this.physics.wavelength, this.physics.waveType)
     }));
 
-    sY += 55;
+    sY += 44;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 0.2,
-      max: 5.0,
-      value: this.physics.frequency,
+      max: 4.0,
+      value: this.physics.frequency || 1.5,
       step: 0.1,
       label: 'FREQUENCY (f)',
       unit: ' Hz',
-      accentColor: Colors.yellow,
+      accentColor: Colors.purple,
       callback: (val) => this.physics.setParameters(this.physics.amplitude, val, this.physics.wavelength, this.physics.waveType)
     }));
 
-    sY += 55;
+    sY += 44;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 4.0,
       max: 25.0,
-      value: this.physics.wavelength,
+      value: this.physics.wavelength || 10.0,
       step: 1.0,
       label: 'WAVELENGTH (λ)',
       unit: ' m',
-      accentColor: '#10B981',
+      accentColor: Colors.green,
       callback: (val) => this.physics.setParameters(this.physics.amplitude, this.physics.frequency, val, this.physics.waveType)
     }));
 
-    this.sidebarRect = { x: sidebarX, y: contentY, w: sidebarW, h: contentH };
-    this.dataPanel.setRect(sidebarX, contentY + 230, sidebarW, contentH - 230);
-
-    const mainW = sidebarX - 40;
-    const simH = Math.floor(contentH * 0.44);
-    const graphH = contentH - simH - 15;
-
-    this.simRect = { x: 20, y: contentY, w: mainW, h: simH };
-    this.graph.setRect(20, contentY + simH + 15, mainW, graphH);
-  }
-
-  updateButtonColors() {
-    if (this.typeButtons.length >= 2) {
-      this.typeButtons[0].color = this.physics.waveType === 'TRANSVERSE' ? '#0284C7' : '#334155';
-      this.typeButtons[1].color = this.physics.waveType === 'LONGITUDINAL' ? '#0284C7' : '#334155';
-    }
+    this.simRect = layout.simRect;
+    this.controlRect = layout.controlRect;
+    this.dataPanel.setRect(layout.dataRect.x, layout.dataRect.y, layout.dataRect.width, layout.dataRect.height);
+    this.graph.setRect(layout.graphRect.x, layout.graphRect.y, layout.graphRect.width, layout.graphRect.height);
   }
 
   handleInput(inputManager) {
@@ -175,10 +153,6 @@ export class WaveLabScene {
     }
     if (this.modal.isOpen) {
       this.modal.update(0, inputManager);
-      return;
-    }
-    for (const btn of this.typeButtons) {
-      btn.handleInput(inputManager);
     }
   }
 
@@ -187,142 +161,101 @@ export class WaveLabScene {
     this.physics.update(effectiveDt);
     this.controlBar.setRunning(this.physics.isRunning);
 
-    this.dataPanel.setMetrics([
-      { label: 'Wave Speed (v = fλ)', value: `${this.physics.waveSpeed.toFixed(2)} m/s` },
-      { label: 'Period (T = 1/f)', value: `${this.physics.period.toFixed(3)} s` },
-      { label: 'Angular Freq (ω)', value: `${this.physics.omega.toFixed(2)} rad/s` },
-      { label: 'Wave Number (k)', value: `${this.physics.k.toFixed(3)} rad/m` },
-      { label: 'Wavelength (λ)', value: `${this.physics.wavelength.toFixed(1)} m` },
-      { label: 'Amplitude (A)', value: `${this.physics.amplitude.toFixed(2)} m` },
-      { label: 'Simulation Time', value: `${this.physics.time.toFixed(2)} s` }
+    if (this.modal.isOpen) {
+      this.modal.update(dt, this.inputManager);
+      return;
+    }
+
+    this.controlBar.update(dt, this.inputManager);
+    for (const b of this.typeButtons) b.update(dt, this.inputManager);
+    for (const s of this.sliders) s.update(dt, this.inputManager);
+
+    this.dataPanel.setItems([
+      { label: 'Wave Speed (v)', value: (this.physics.waveSpeed || 0).toFixed(2), unit: 'm/s', color: Colors.cyan },
+      { label: 'Period (T = 1/f)', value: (this.physics.period || 0).toFixed(3), unit: 's', color: Colors.purple },
+      { label: 'Angular Freq (ω)', value: (this.physics.omega || 0).toFixed(2), unit: 'rad/s', color: Colors.purple },
+      { label: 'Wave Number (k)', value: (this.physics.k || 0).toFixed(3), unit: 'rad/m', color: Colors.green },
+      { label: 'Wavelength (λ)', value: (this.physics.wavelength || 0).toFixed(1), unit: 'm', color: Colors.green },
+      { label: 'Amplitude (A)', value: (this.physics.amplitude || 0).toFixed(2), unit: 'm', color: Colors.cyan },
+      { label: 'Sim Time (t)', value: (this.physics.time || 0).toFixed(2), unit: 's', color: Colors.text }
     ]);
 
-    // Update graph profile
     const profilePoints = [];
     const maxDist = 30.0;
-    const steps = 100;
+    const steps = 60;
     for (let i = 0; i <= steps; i++) {
       const x = (i / steps) * maxDist;
       const y = this.physics.getDisplacementAt(x);
       profilePoints.push({ x, y });
     }
 
-    this.graph.setDatasets([
-      { label: 'Displacement y(x)', data: profilePoints, color: Colors.cyan, width: 2.5 }
-    ]);
-    this.graph.setLimits(0, maxDist, -this.physics.amplitude * 1.3, this.physics.amplitude * 1.3);
+    this.graph.clearDatasets();
+    this.graph.addDataset({ label: 'Displacement y(x)', color: Colors.cyan, points: profilePoints });
   }
 
   render(ctx) {
-    Renderer.drawRect(ctx, 0, 0, ctx.canvas.width, ctx.canvas.height, { fill: Colors.bgDark });
+    const { width, height } = this.canvasEngine.getBounds();
+
+    Renderer.drawRect(ctx, 0, 0, width, height, { fill: Colors.background });
+    Renderer.drawGrid(ctx, width, height, 40);
 
     this.controlBar.render(ctx);
 
-    // Sidebar
-    Renderer.drawCard(ctx, this.sidebarRect.x, this.sidebarRect.y, this.sidebarRect.w, this.sidebarRect.h, {
-      title: 'WAVE PARAMETERS',
-      accentColor: '#10B981'
-    });
+    if (this.controlRect) {
+      Renderer.drawPanel(ctx, this.controlRect.x, this.controlRect.y, this.controlRect.width, this.controlRect.height, {
+        fill: Colors.panel,
+        stroke: Colors.panelBorder
+      });
+      for (const b of this.typeButtons) b.render(ctx);
+      for (const s of this.sliders) s.render(ctx);
+    }
 
-    for (const btn of this.typeButtons) {
-      btn.render(ctx);
-    }
-    for (const slider of this.sliders) {
-      slider.render(ctx);
-    }
     this.dataPanel.render(ctx);
 
-    // Simulation Viewport
-    Renderer.drawCard(ctx, this.simRect.x, this.simRect.y, this.simRect.w, this.simRect.h, {
-      title: `PROPAGATION: ${this.physics.waveType} WAVE (v = ${this.physics.waveSpeed.toFixed(1)} m/s)`,
-      accentColor: Colors.cyan
-    });
+    if (this.simRect) {
+      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height, {
+        fill: '#090E1A',
+        stroke: Colors.panelBorder
+      });
 
-    this.renderWaveMedium(ctx);
-
-    // Graph
-    this.graph.render(ctx);
-
-    // Modal
-    this.modal.render(ctx);
-  }
-
-  renderWaveMedium(ctx) {
-    const startX = this.simRect.x + 30;
-    const endX = this.simRect.x + this.simRect.w - 30;
-    const cy = this.simRect.y + this.simRect.h * 0.52;
-    const length = endX - startX;
-
-    if (this.physics.waveType === 'TRANSVERSE') {
-      // Draw reference equilibrium axis
-      Renderer.drawLine(ctx, startX, cy, endX, cy, { color: '#334155', width: 1, dash: [4, 4] });
-
-      // Continuous wave line
+      ctx.save();
       ctx.beginPath();
-      ctx.strokeStyle = Colors.cyan;
-      ctx.lineWidth = 3;
+      ctx.rect(this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height);
+      ctx.clip();
 
-      const pxPerM = length / 30.0;
-      const ampScale = 12;
+      const centerY = this.simRect.y + this.simRect.height / 2;
+      const startX = this.simRect.x + 20;
+      const endX = this.simRect.x + this.simRect.width - 20;
+      const waveW = endX - startX;
 
-      for (let px = 0; px <= length; px += 2) {
-        const xPhys = px / pxPerM;
-        const yPhys = this.physics.getDisplacementAt(xPhys);
-        const scrX = startX + px;
-        const scrY = cy - yPhys * ampScale;
-        if (px === 0) ctx.moveTo(scrX, scrY);
-        else ctx.lineTo(scrX, scrY);
-      }
-      ctx.stroke();
-
-      // Draw distinct oscillating beads/particles
-      const numBeads = 24;
-      for (let i = 0; i <= numBeads; i++) {
-        const px = (i / numBeads) * length;
-        const xPhys = px / pxPerM;
-        const yPhys = this.physics.getDisplacementAt(xPhys);
-        const scrX = startX + px;
-        const scrY = cy - yPhys * ampScale;
-
-        Renderer.drawCircle(ctx, scrX, scrY, 4, {
-          fill: i % 4 === 0 ? '#EF4444' : Colors.yellow,
-          stroke: '#FFFFFF',
-          width: 1
-        });
-      }
-
-      // Indicator for wave speed direction
-      Renderer.drawText(ctx, `Propagation Speed v ➔ ${this.physics.waveSpeed.toFixed(1)} m/s`, endX - 160, this.simRect.y + 24, {
-        color: '#38BDF8',
-        size: 11,
-        weight: 'bold'
-      });
-
-    } else {
-      // LONGITUDINAL WAVE
-      // Draw vibrating density bars / compressions & rarefactions
-      const numLines = 60;
-      const pxPerM = length / 30.0;
-      const ampScale = 8;
-
-      for (let i = 0; i <= numLines; i++) {
-        const unperturbedX = startX + (i / numLines) * length;
-        const xPhys = (i / numLines) * 30.0;
-        const displacement = this.physics.getDisplacementAt(xPhys);
-        const actualX = unperturbedX + displacement * ampScale;
-
-        // Draw vertical particle lines
-        const isHighlight = i % 8 === 0;
-        Renderer.drawLine(ctx, actualX, cy - 35, actualX, cy + 35, {
-          color: isHighlight ? '#EF4444' : '#38BDF8',
-          width: isHighlight ? 3 : 1.5
-        });
+      if (this.physics.waveType === 'TRANSVERSE') {
+        ctx.strokeStyle = Colors.cyan;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        const pts = 80;
+        for (let i = 0; i <= pts; i++) {
+          const px = startX + (i / pts) * waveW;
+          const xMeters = (i / pts) * 30.0;
+          const disp = this.physics.getDisplacementAt(xMeters);
+          const py = centerY - disp * 6.0;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      } else {
+        const dots = 30;
+        for (let i = 0; i <= dots; i++) {
+          const xMeters = (i / dots) * 30.0;
+          const disp = this.physics.getDisplacementAt(xMeters);
+          const px = startX + (i / dots) * waveW + disp * 4.0;
+          Renderer.drawCircle(ctx, px, centerY, 5, { fill: Colors.cyan });
+        }
       }
 
-      Renderer.drawText(ctx, 'COMPRESSION ➔ Rarefaction ➔ COMPRESSION', startX + 20, cy - 50, {
-        color: '#94A3B8',
-        size: 11
-      });
+      ctx.restore();
     }
+
+    this.graph.render(ctx);
+    this.modal.render(ctx, width, height);
   }
 }

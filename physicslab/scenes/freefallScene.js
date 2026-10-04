@@ -139,13 +139,13 @@ export class FreeFallScene {
       const isSelected = this.physics.planetName === p.name;
       const btn = new Button({
         x: pBtnX,
-        y: sliderY + 22,
+        y: sliderY + 18,
         width: pBtnWidth,
-        height: 32,
+        height: 38,
         text: p.name.toUpperCase(),
+        subtext: `${p.g} m/s²`,
+        active: isSelected,
         accentColor: isSelected ? Colors.cyan : Colors.panelBorder,
-        badgeText: `${p.g}m/s²`,
-        badgeColor: isSelected ? Colors.cyan : Colors.textDark,
         callback: () => {
           this.physics.setPlanet(key);
           this.rebuildUI();

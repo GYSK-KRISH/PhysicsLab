@@ -113,6 +113,10 @@ export class SuperpositionPhysics {
 
     return { y1, y2, yResultant };
   }
+
+  getDisplacementsAt(x, t = this.time) {
+    return this.getWavesAt(x, t);
+  }
 }
 
 export class StandingWavePhysics {
@@ -250,5 +254,13 @@ export class BeatsPhysics {
       envelope,
       negEnvelope: -envelope
     };
+  }
+
+  getSignalAt(t = this.time) {
+    return this.getStateAt(t).resultant;
+  }
+
+  getEnvelopeAt(t = this.time) {
+    return this.getStateAt(t).envelope;
   }
 }

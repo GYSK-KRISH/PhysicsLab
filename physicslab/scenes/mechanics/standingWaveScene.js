@@ -1,14 +1,15 @@
-// Standing Wave Laboratory Scene for PhysicsLab
+// Standing Waves & Harmonics Laboratory Scene for PhysicsLab
 import { Colors, Renderer } from '../../engine/renderer.js';
-import { Button, Slider } from '../../engine/ui.js';
+import { Slider } from '../../engine/ui.js';
 import { StandingWavePhysics } from '../../physics/mechanics/waves.js';
 import { GraphRenderer } from '../../engine/graphRenderer.js';
 import { MechanicsControlBar, MechanicsDataPanel, MechanicsModalOverlay } from '../../engine/mechanicsUI.js';
+import { LayoutEngine } from '../../engine/layout.js';
 
 export class StandingWaveScene {
   constructor() {
     this.physics = new StandingWavePhysics({
-      length: 20.0,
+      length: 10.0,
       tension: 100.0,
       linearDensity: 0.01,
       harmonicN: 2
@@ -23,35 +24,33 @@ export class StandingWaveScene {
         this.isSlowMo = !this.isSlowMo;
         this.controlBar.setSlowMo(this.isSlowMo);
       },
-      onOpenFormula: () => this.modal.openFormula('STANDING WAVES ON A STRING', [
-        { name: 'Wave Speed on String', formula: 'v = √(T / μ)', desc: 'T is string tension, μ is linear mass density' },
-        { name: 'Harmonic Wavelength', formula: 'λₙ = 2·L / n', desc: 'Boundary condition requires zero displacement at both fixed ends' },
-        { name: 'Harmonic Frequency', formula: 'fₙ = n · v / (2·L) = n · f₁', desc: 'Integer multiples of the fundamental frequency' },
-        { name: 'Standing Wave Function', formula: 'y(x, t) = 2A · sin(k·x) · cos(ω·t)', desc: 'Product of spatial mode envelope and harmonic oscillation' }
+      onOpenFormula: () => this.modal.openFormula('STANDING WAVES & HARMONICS', [
+        { name: 'String Wave Speed', formula: 'v = √(T / μ)', desc: 'Speed of transverse wave along string under tension T and linear mass density μ' },
+        { name: 'Harmonic Wavelength', formula: 'λ_n = (2·L) / n', desc: 'Wavelength for nth harmonic node-to-node standing wave' },
+        { name: 'Harmonic Frequency', formula: 'f_n = n · f₁ = (n / 2L) · √(T / μ)', desc: 'Resonant frequency of nth standing wave harmonic' }
       ]),
-      onOpenConcept: () => this.modal.openConcept('STANDING WAVES & HARMONICS', {
-        what: 'A standing wave forms from the superposition of two identical waves traveling in opposite directions along a bounded medium.',
-        how: 'Nodes are points of complete destructive interference that remain permanently stationary. Antinodes are points of maximum constructive interference.',
-        keyIdea: 'Musical instruments (like guitars, violins, and pianos) produce pitch by exciting standing wave harmonics on tensioned strings.'
+      onOpenConcept: () => this.modal.openConcept('STANDING WAVES & NODES', {
+        what: 'Standing waves are produced by the interference of two identical counter-propagating traveling waves trapped between boundaries.',
+        how: 'Fixed ends enforce zero-displacement points called nodes. Midpoints between nodes experience maximum oscillation amplitude called antinodes.',
+        keyIdea: 'Integer harmonic modes (n = 1, 2, 3...) produce discrete fundamental and overtone musical pitches on stretched strings.'
       }),
-      onOpenProblem: () => this.modal.openProblem('WAVE_SPEED'),
+      onOpenProblem: () => this.modal.openProblem('STANDING_WAVE_HARMONIC'),
       onBack: () => {
         import('./mechanicsMenuScene.js').then(m => this.sceneManager.changeScene(new m.MechanicsMenuScene()));
       }
     });
 
-    this.dataPanel = new MechanicsDataPanel({ title: 'STANDING WAVE METRICS' });
+    this.dataPanel = new MechanicsDataPanel({ title: 'HARMONIC DATA' });
     this.modal = new MechanicsModalOverlay();
     this.graph = new GraphRenderer({
-      title: 'String Displacement Profile y(x) & Envelope',
-      xLabel: 'Position along string x',
+      title: 'Standing Wave Envelope y(x) & Nodes',
+      xLabel: 'String Position x',
       xUnit: 'm',
-      yLabel: 'Displacement',
+      yLabel: 'Envelope Displacement',
       yUnit: 'm'
     });
 
     this.sliders = [];
-    this.harmonicButtons = [];
     this.isSlowMo = false;
     this.lastWidth = 0;
     this.lastHeight = 0;
@@ -64,95 +63,53 @@ export class StandingWaveScene {
 
   rebuildUI() {
     const { width, height } = this.canvasEngine.getBounds();
-    this.controlBar.setBounds(20, 12, width - 40);
+    const layout = LayoutEngine.calculateExperimentLayout(width, height);
 
-    const sidebarW = Math.max(260, Math.min(320, width * 0.28));
-    const sidebarX = width - sidebarW - 20;
-    const contentY = 64;
-    const contentH = height - contentY - 20;
+    this.controlBar.setBounds(layout.toolbarRect.x, layout.toolbarRect.y, layout.toolbarRect.width);
 
     this.sliders = [];
-    this.harmonicButtons = [];
-    let sY = contentY + 15;
-    const sW = sidebarW - 40;
+    let sY = layout.controlRect.y + 16;
+    const sW = layout.controlRect.width - 24;
 
-    // Harmonic selector buttons (n = 1, 2, 3, 4, 5)
-    const btnW = (sW - 16) / 5;
-    for (let n = 1; n <= 5; n++) {
-      this.harmonicButtons.push(new Button({
-        x: sidebarX + 20 + (n - 1) * (btnW + 4),
-        y: sY,
-        width: btnW,
-        height: 28,
-        text: `n=${n}`,
-        color: this.physics.harmonicN === n ? '#0284C7' : '#334155',
-        callback: () => {
-          this.physics.setParameters(this.physics.length, this.physics.tension, this.physics.linearDensity, n);
-          this.updateHarmonicBtnColors();
-        }
-      }));
-    }
-
-    sY += 45;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
+      y: sY,
+      width: sW,
+      min: 1,
+      max: 5,
+      value: this.physics.harmonicN || 2,
+      step: 1,
+      label: 'HARMONIC NUMBER (n)',
+      unit: '',
+      accentColor: Colors.yellow,
+      callback: (nVal) => {
+        this.physics.harmonicN = nVal;
+        this.physics.recalculate();
+      }
+    }));
+
+    sY += 44;
+    this.sliders.push(new Slider({
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 20,
-      max: 400,
-      value: this.physics.tension,
+      max: 300,
+      value: this.physics.tension || 100,
       step: 10,
-      label: 'TENSION (T)',
+      label: 'STRING TENSION (T)',
       unit: ' N',
-      accentColor: '#EF4444',
-      callback: (val) => this.physics.setParameters(this.physics.length, val, this.physics.linearDensity, this.physics.harmonicN)
-    }));
-
-    sY += 55;
-    this.sliders.push(new Slider({
-      x: sidebarX + 20,
-      y: sY,
-      width: sW,
-      min: 0.005,
-      max: 0.05,
-      value: this.physics.linearDensity,
-      step: 0.005,
-      label: 'LINEAR DENSITY (μ)',
-      unit: ' kg/m',
-      accentColor: Colors.yellow,
-      callback: (val) => this.physics.setParameters(this.physics.length, this.physics.tension, val, this.physics.harmonicN)
-    }));
-
-    sY += 55;
-    this.sliders.push(new Slider({
-      x: sidebarX + 20,
-      y: sY,
-      width: sW,
-      min: 5.0,
-      max: 30.0,
-      value: this.physics.length,
-      step: 1.0,
-      label: 'STRING LENGTH (L)',
-      unit: ' m',
       accentColor: Colors.cyan,
-      callback: (val) => this.physics.setParameters(val, this.physics.tension, this.physics.linearDensity, this.physics.harmonicN)
+      callback: (tVal) => {
+        this.physics.tension = tVal;
+        this.physics.recalculate();
+      }
     }));
 
-    this.sidebarRect = { x: sidebarX, y: contentY, w: sidebarW, h: contentH };
-    this.dataPanel.setRect(sidebarX, contentY + 230, sidebarW, contentH - 230);
-
-    const mainW = sidebarX - 40;
-    const simH = Math.floor(contentH * 0.44);
-    const graphH = contentH - simH - 15;
-
-    this.simRect = { x: 20, y: contentY, w: mainW, h: simH };
-    this.graph.setRect(20, contentY + simH + 15, mainW, graphH);
-  }
-
-  updateHarmonicBtnColors() {
-    this.harmonicButtons.forEach((btn, idx) => {
-      btn.color = (this.physics.harmonicN === idx + 1) ? '#0284C7' : '#334155';
-    });
+    this.simRect = layout.simRect;
+    this.controlRect = layout.controlRect;
+    this.dataPanel.setRect(layout.dataRect.x, layout.dataRect.y, layout.dataRect.width, layout.dataRect.height);
+    this.graph.setRect(layout.graphRect.x, layout.graphRect.y, layout.graphRect.width, layout.graphRect.height);
   }
 
   handleInput(inputManager) {
@@ -164,10 +121,6 @@ export class StandingWaveScene {
     }
     if (this.modal.isOpen) {
       this.modal.update(0, inputManager);
-      return;
-    }
-    for (const btn of this.harmonicButtons) {
-      btn.handleInput(inputManager);
     }
   }
 
@@ -176,139 +129,94 @@ export class StandingWaveScene {
     this.physics.update(effectiveDt);
     this.controlBar.setRunning(this.physics.isRunning);
 
-    this.dataPanel.setMetrics([
-      { label: 'Harmonic Number (n)', value: `${this.physics.harmonicN} (${this.physics.harmonicN === 1 ? 'Fundamental' : `${this.physics.harmonicN}th Harmonic`})` },
-      { label: 'Wave Speed (v)', value: `${this.physics.waveSpeed.toFixed(1)} m/s` },
-      { label: 'Frequency (fₙ)', value: `${this.physics.frequency.toFixed(2)} Hz` },
-      { label: 'Wavelength (λₙ)', value: `${this.physics.wavelength.toFixed(2)} m` },
-      { label: 'Nodes Count (N)', value: `${this.physics.nodes.length}` },
-      { label: 'Antinodes (A)', value: `${this.physics.antinodes.length}` }
-    ]);
-
-    // Graph profile
-    const steps = 100;
-    const dsLive = [];
-    const dsEnvPos = [];
-    const dsEnvNeg = [];
-
-    for (let i = 0; i <= steps; i++) {
-      const x = (i / steps) * this.physics.length;
-      const y = this.physics.getDisplacementAt(x);
-      const env = 2 * this.physics.amplitude * Math.abs(Math.sin(this.physics.k * x));
-      dsLive.push({ x, y });
-      dsEnvPos.push({ x, y: env });
-      dsEnvNeg.push({ x, y: -env });
+    if (this.modal.isOpen) {
+      this.modal.update(dt, this.inputManager);
+      return;
     }
 
-    this.graph.setDatasets([
-      { label: 'String Shape y(x, t)', data: dsLive, color: Colors.cyan, width: 2.5 },
-      { label: '+Envelope', data: dsEnvPos, color: '#64748B', width: 1, dash: [4, 4] },
-      { label: '-Envelope', data: dsEnvNeg, color: '#64748B', width: 1, dash: [4, 4] }
+    this.controlBar.update(dt, this.inputManager);
+    for (const s of this.sliders) s.update(dt, this.inputManager);
+
+    this.dataPanel.setItems([
+      { label: 'Harmonic Mode (n)', value: `${this.physics.harmonicN}`, unit: '', color: Colors.yellow },
+      { label: 'Wave Speed (v)', value: (this.physics.waveSpeed || 0).toFixed(1), unit: 'm/s', color: Colors.cyan },
+      { label: 'Wavelength (λ_n)', value: (this.physics.wavelength || 0).toFixed(2), unit: 'm', color: Colors.green },
+      { label: 'Frequency (f_n)', value: (this.physics.frequency || 0).toFixed(2), unit: 'Hz', color: Colors.purple },
+      { label: 'Nodes Count', value: `${(this.physics.harmonicN || 1) + 1}`, unit: 'nodes', color: Colors.text }
     ]);
-    const maxA = 2 * this.physics.amplitude * 1.3;
-    this.graph.setLimits(0, this.physics.length, -maxA, maxA);
+
+    const L = this.physics.length || 10;
+    const steps = 60;
+    const profilePts = [];
+
+    for (let i = 0; i <= steps; i++) {
+      const x = (i / steps) * L;
+      const y = this.physics.getDisplacementAt(x);
+      profilePts.push({ x, y });
+    }
+
+    this.graph.clearDatasets();
+    this.graph.addDataset({ label: `Harmonic n=${this.physics.harmonicN}`, color: Colors.yellow, points: profilePts, lineWidth: 2.5 });
   }
 
   render(ctx) {
-    Renderer.drawRect(ctx, 0, 0, ctx.canvas.width, ctx.canvas.height, { fill: Colors.bgDark });
+    const { width, height } = this.canvasEngine.getBounds();
+
+    Renderer.drawRect(ctx, 0, 0, width, height, { fill: Colors.background });
+    Renderer.drawGrid(ctx, width, height, 40);
 
     this.controlBar.render(ctx);
 
-    // Sidebar
-    Renderer.drawCard(ctx, this.sidebarRect.x, this.sidebarRect.y, this.sidebarRect.w, this.sidebarRect.h, {
-      title: 'HARMONIC & STRING CONTROLS',
-      accentColor: '#0284C7'
-    });
+    if (this.controlRect) {
+      Renderer.drawPanel(ctx, this.controlRect.x, this.controlRect.y, this.controlRect.width, this.controlRect.height, {
+        fill: Colors.panel,
+        stroke: Colors.panelBorder
+      });
+      for (const s of this.sliders) s.render(ctx);
+    }
 
-    for (const btn of this.harmonicButtons) {
-      btn.render(ctx);
-    }
-    for (const slider of this.sliders) {
-      slider.render(ctx);
-    }
     this.dataPanel.render(ctx);
 
-    // Simulation Viewport
-    Renderer.drawCard(ctx, this.simRect.x, this.simRect.y, this.simRect.w, this.simRect.h, {
-      title: `STANDING WAVE (HARMONIC n = ${this.physics.harmonicN}, f = ${this.physics.frequency.toFixed(1)} Hz)`,
-      accentColor: Colors.cyan
-    });
+    if (this.simRect) {
+      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height, {
+        fill: '#090E1A',
+        stroke: Colors.panelBorder
+      });
 
-    this.renderString(ctx);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height);
+      ctx.clip();
 
-    // Graph
+      const centerY = this.simRect.y + this.simRect.height / 2;
+      const startX = this.simRect.x + 30;
+      const endX = this.simRect.x + this.simRect.width - 30;
+      const stringW = endX - startX;
+
+      // Fixed end supports
+      Renderer.drawRect(ctx, startX - 8, centerY - 25, 8, 50, { fill: '#1E293B', stroke: Colors.panelBorder });
+      Renderer.drawRect(ctx, endX, centerY - 25, 8, 50, { fill: '#1E293B', stroke: Colors.panelBorder });
+
+      // Vibrating String
+      ctx.strokeStyle = Colors.yellow;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const pts = 80;
+      const L = this.physics.length || 10;
+      for (let i = 0; i <= pts; i++) {
+        const px = startX + (i / pts) * stringW;
+        const xMeters = (i / pts) * L;
+        const disp = this.physics.getDisplacementAt(xMeters);
+        const py = centerY - disp * 12.0;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
     this.graph.render(ctx);
-
-    // Modal
-    this.modal.render(ctx);
-  }
-
-  renderString(ctx) {
-    const startX = this.simRect.x + 40;
-    const endX = this.simRect.x + this.simRect.w - 40;
-    const cy = this.simRect.y + this.simRect.h * 0.52;
-    const lengthPx = endX - startX;
-
-    // Fixed end supports
-    Renderer.drawRect(ctx, startX - 12, cy - 45, 12, 90, { fill: '#334155' });
-    Renderer.drawRect(ctx, endX, cy - 45, 12, 90, { fill: '#334155' });
-
-    // Reference axis
-    Renderer.drawLine(ctx, startX, cy, endX, cy, { color: '#1E293B', width: 1, dash: [4, 4] });
-
-    const pxPerM = lengthPx / this.physics.length;
-    const ampScale = 14;
-
-    // Draw Dotted Envelope
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    for (let px = 0; px <= lengthPx; px += 2) {
-      const xPhys = px / pxPerM;
-      const env = 2 * this.physics.amplitude * Math.sin(this.physics.k * xPhys);
-      const scrX = startX + px;
-      const scrY = cy - env * ampScale;
-      if (px === 0) ctx.moveTo(scrX, scrY);
-      else ctx.lineTo(scrX, scrY);
-    }
-    for (let px = 0; px <= lengthPx; px += 2) {
-      const xPhys = px / pxPerM;
-      const env = -2 * this.physics.amplitude * Math.sin(this.physics.k * xPhys);
-      const scrX = startX + px;
-      const scrY = cy - env * ampScale;
-      if (px === 0) ctx.moveTo(scrX, scrY);
-      else ctx.lineTo(scrX, scrY);
-    }
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Draw Vibrating String
-    ctx.beginPath();
-    ctx.strokeStyle = Colors.cyan;
-    ctx.lineWidth = 3.5;
-    for (let px = 0; px <= lengthPx; px += 2) {
-      const xPhys = px / pxPerM;
-      const yPhys = this.physics.getDisplacementAt(xPhys);
-      const scrX = startX + px;
-      const scrY = cy - yPhys * ampScale;
-      if (px === 0) ctx.moveTo(scrX, scrY);
-      else ctx.lineTo(scrX, scrY);
-    }
-    ctx.stroke();
-
-    // Mark Nodes (N)
-    for (const nodeX of this.physics.nodes) {
-      const scrX = startX + nodeX * pxPerM;
-      Renderer.drawCircle(ctx, scrX, cy, 5, { fill: '#EF4444', stroke: '#FFFFFF', width: 1.5 });
-      Renderer.drawText(ctx, 'N', scrX, cy + 20, { color: '#EF4444', size: 11, weight: 'bold', align: 'center' });
-    }
-
-    // Mark Antinodes (A)
-    for (const antinodeX of this.physics.antinodes) {
-      const scrX = startX + antinodeX * pxPerM;
-      Renderer.drawCircle(ctx, scrX, cy - 35, 4, { fill: '#10B981' });
-      Renderer.drawText(ctx, 'A', scrX, cy - 42, { color: '#10B981', size: 11, weight: 'bold', align: 'center' });
-    }
+    this.modal.render(ctx, width, height);
   }
 }

@@ -382,8 +382,77 @@ export class MechanicsModalOverlay {
     this.keypadInput = '';
     this.problemResult = null;
     this.currentProblem = null;
-    this.buttons = [];
     this.scrollOffset = 0;
+
+    this.closeBtn = new Button({
+      text: 'CLOSE',
+      accentColor: Colors.purple,
+      callback: () => this.close()
+    });
+
+    this.initKeypadButtons();
+  }
+
+  initKeypadButtons() {
+    this.keypadButtons = [];
+    const keys = [
+      ['1', '2', '3'],
+      ['4', '5', '6'],
+      ['7', '8', '9'],
+      ['.', '0', '-']
+    ];
+    for (let r = 0; r < keys.length; r++) {
+      for (let c = 0; c < keys[r].length; c++) {
+        const val = keys[r][c];
+        this.keypadButtons.push({
+          key: val,
+          btn: new Button({
+            text: val,
+            accentColor: Colors.panelBorder,
+            callback: () => this.handleKeypadClick(val)
+          })
+        });
+      }
+    }
+    this.clearBtn = new Button({ text: 'CLEAR', accentColor: Colors.textMuted, callback: () => this.handleKeypadClick('CLEAR') });
+    this.backBtn = new Button({ text: '⌫ BACK', accentColor: Colors.textMuted, callback: () => this.handleKeypadClick('BACK') });
+    this.submitBtn = new Button({ text: 'SUBMIT', accentColor: Colors.green, callback: () => this.handleKeypadClick('SUBMIT') });
+    this.newProbBtn = new Button({ text: 'NEW PROB', accentColor: Colors.purple, callback: () => this.handleKeypadClick('NEW_PROBLEM') });
+  }
+
+  updateKeypadBounds(modalX, modalY, modalW, modalH) {
+    const contentY = modalY + 54;
+    const contentW = modalW - 32;
+    const inputY = contentY + 58;
+    const padX = modalX + 20;
+    const padY = inputY + 42;
+    const padKeyW = Math.min(56, Math.floor((contentW - 130) / 3));
+    const padKeyH = 28;
+
+    const keys = [
+      ['1', '2', '3'],
+      ['4', '5', '6'],
+      ['7', '8', '9'],
+      ['.', '0', '-']
+    ];
+
+    let idx = 0;
+    for (let r = 0; r < keys.length; r++) {
+      for (let c = 0; c < keys[r].length; c++) {
+        const item = this.keypadButtons[idx++];
+        if (item) {
+          item.btn.setRect(padX + c * (padKeyW + 5), padY + r * (padKeyH + 5), padKeyW, padKeyH);
+        }
+      }
+    }
+
+    const actX = padX + 3 * (padKeyW + 5) + 8;
+    const actW = Math.max(80, modalX + modalW - actX - 20);
+
+    this.clearBtn.setRect(actX, padY, actW, padKeyH);
+    this.backBtn.setRect(actX, padY + (padKeyH + 5), actW, padKeyH);
+    this.submitBtn.setRect(actX, padY + 2 * (padKeyH + 5), actW, padKeyH);
+    this.newProbBtn.setRect(actX, padY + 3 * (padKeyH + 5), actW, padKeyH);
   }
 
   openFormula(title, formulas) {
@@ -443,11 +512,40 @@ export class MechanicsModalOverlay {
   update(dt, inputManager) {
     if (!this.isOpen || !inputManager) return;
 
-    for (const btn of this.buttons) {
-      btn.update(dt, inputManager);
+    const bounds = inputManager.canvasEngine ? inputManager.canvasEngine.getBounds() : { width: 1280, height: 720 };
+    const width = bounds.width;
+    const height = bounds.height;
+
+    const modalW = Math.min(680, width - 24);
+    const modalH = Math.min(520, height - 32);
+    const modalX = Math.round((width - modalW) / 2);
+    const modalY = Math.round((height - modalH) / 2);
+
+    this.closeBtn.setRect(modalX + modalW - 75, modalY + 10, 65, 28);
+    this.closeBtn.update(dt, inputManager);
+
+    // Backdrop click to close
+    const pointer = inputManager.pointer;
+    if (pointer && pointer.justReleased) {
+      const px = pointer.x;
+      const py = pointer.y;
+      const isOutside = (px < modalX || px > modalX + modalW || py < modalY || py > modalY + modalH);
+      if (isOutside) {
+        this.close();
+        return;
+      }
     }
 
     if (this.mode === 'PROBLEM') {
+      this.updateKeypadBounds(modalX, modalY, modalW, modalH);
+      for (const item of this.keypadButtons) {
+        item.btn.update(dt, inputManager);
+      }
+      this.clearBtn.update(dt, inputManager);
+      this.backBtn.update(dt, inputManager);
+      this.submitBtn.update(dt, inputManager);
+      this.newProbBtn.update(dt, inputManager);
+
       const numKeys = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'Period', 'Minus'];
       for (const k of numKeys) {
         const code = k.length === 1 ? `Digit${k}` : (k === 'Period' ? 'Period' : 'Minus');
@@ -499,17 +597,8 @@ export class MechanicsModalOverlay {
       maxWidth: modalW - 100
     });
 
-    this.buttons = [];
-    const closeBtn = new Button({
-      x: modalX + modalW - 75,
-      y: modalY + 10,
-      width: 65,
-      height: 28,
-      text: 'CLOSE',
-      accentColor: Colors.purple,
-      callback: () => this.close()
-    });
-    this.buttons.push(closeBtn);
+    this.closeBtn.setRect(modalX + modalW - 75, modalY + 10, 65, 28);
+    this.closeBtn.render(ctx);
 
     Renderer.drawLine(ctx, modalX + 12, modalY + 44, modalX + modalW - 12, modalY + 44, {
       stroke: Colors.panelBorder,
@@ -598,62 +687,17 @@ export class MechanicsModalOverlay {
           maxWidth: contentW - 16
         });
 
-        const padX = modalX + 20;
-        const padY = inputY + 42;
-        const padKeyW = Math.min(56, Math.floor((contentW - 130) / 3));
-        const padKeyH = 28;
-        const keys = [
-          ['1', '2', '3'],
-          ['4', '5', '6'],
-          ['7', '8', '9'],
-          ['.', '0', '-']
-        ];
-
-        for (let r = 0; r < keys.length; r++) {
-          for (let c = 0; c < keys[r].length; c++) {
-            const val = keys[r][c];
-            const kBtn = new Button({
-              x: padX + c * (padKeyW + 5),
-              y: padY + r * (padKeyH + 5),
-              width: padKeyW,
-              height: padKeyH,
-              text: val,
-              accentColor: Colors.panelBorder,
-              callback: () => this.handleKeypadClick(val)
-            });
-            this.buttons.push(kBtn);
-          }
+        this.updateKeypadBounds(modalX, modalY, modalW, modalH);
+        for (const item of this.keypadButtons) {
+          item.btn.render(ctx);
         }
-
-        const actX = padX + 3 * (padKeyW + 5) + 8;
-        const actW = Math.max(80, modalX + modalW - actX - 20);
-
-        this.buttons.push(new Button({
-          x: actX, y: padY, width: actW, height: padKeyH,
-          text: 'CLEAR', accentColor: Colors.textMuted,
-          callback: () => this.handleKeypadClick('CLEAR')
-        }));
-
-        this.buttons.push(new Button({
-          x: actX, y: padY + (padKeyH + 5), width: actW, height: padKeyH,
-          text: '⌫ BACK', accentColor: Colors.textMuted,
-          callback: () => this.handleKeypadClick('BACK')
-        }));
-
-        this.buttons.push(new Button({
-          x: actX, y: padY + 2 * (padKeyH + 5), width: actW, height: padKeyH,
-          text: 'SUBMIT', accentColor: Colors.green,
-          callback: () => this.handleKeypadClick('SUBMIT')
-        }));
-
-        this.buttons.push(new Button({
-          x: actX, y: padY + 3 * (padKeyH + 5), width: actW, height: padKeyH,
-          text: 'NEW PROB', accentColor: Colors.purple,
-          callback: () => this.handleKeypadClick('NEW_PROBLEM')
-        }));
+        this.clearBtn.render(ctx);
+        this.backBtn.render(ctx);
+        this.submitBtn.render(ctx);
+        this.newProbBtn.render(ctx);
 
         if (this.problemResult) {
-          const resY = padY + 4 * (padKeyH + 5) + 6;
+          const resY = modalY + modalH - 56;
           const isOk = this.problemResult.isCorrect;
 
           Renderer.drawRoundedRect(ctx, modalX + 16, resY, contentW, 40, 6, {
@@ -674,10 +718,6 @@ export class MechanicsModalOverlay {
           });
         }
       }
-    }
-
-    for (const btn of this.buttons) {
-      btn.render(ctx);
     }
 
     ctx.restore();

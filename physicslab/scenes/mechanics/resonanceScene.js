@@ -1,18 +1,19 @@
-// Resonance Laboratory Scene for PhysicsLab
+// Mechanical Resonance Laboratory Scene for PhysicsLab
 import { Colors, Renderer } from '../../engine/renderer.js';
 import { Slider } from '../../engine/ui.js';
 import { ForcedOscillationPhysics } from '../../physics/mechanics/shm.js';
 import { GraphRenderer } from '../../engine/graphRenderer.js';
 import { MechanicsControlBar, MechanicsDataPanel, MechanicsModalOverlay } from '../../engine/mechanicsUI.js';
+import { LayoutEngine } from '../../engine/layout.js';
 
 export class ResonanceScene {
   constructor() {
     this.physics = new ForcedOscillationPhysics({
       mass: 1.0,
-      springConstant: 100.0,
-      damping: 0.3,
+      springConstant: 40.0,
+      damping: 0.4,
       f0: 15.0,
-      drivingOmega: 10.0
+      drivingOmega: 6.32
     });
 
     this.controlBar = new MechanicsControlBar({
@@ -24,29 +25,29 @@ export class ResonanceScene {
         this.isSlowMo = !this.isSlowMo;
         this.controlBar.setSlowMo(this.isSlowMo);
       },
-      onOpenFormula: () => this.modal.openFormula('RESONANCE & Q-FACTOR', [
-        { name: 'Resonance Condition', formula: 'ω = ω₀ = √(k / m)', desc: 'Peak amplitude occurs when driving frequency equals natural frequency' },
-        { name: 'Resonant Amplitude', formula: 'A_max = F₀ / (c · ω₀)', desc: 'Peak height is inversely proportional to damping coefficient c' },
-        { name: 'Quality Factor (Q)', formula: 'Q = (m · ω₀) / c = ω₀ / Δω', desc: 'Sharpness of the resonance peak; higher Q gives sharper response' }
+      onOpenFormula: () => this.modal.openFormula('RESONANCE & RESPONSE CURVE', [
+        { name: 'Resonance Condition', formula: 'ω_res = √(ω₀² - 2·γ²)', desc: 'Driving frequency that produces peak steady-state amplitude' },
+        { name: 'Quality Factor Q', formula: 'Q = (m·ω₀) / c = ω₀ / (2·γ)', desc: 'Dimensionless parameter measuring resonance sharpness and damping energy loss' },
+        { name: 'Resonance Amplitude Peak', formula: 'A_max ≈ (F₀ · Q) / k', desc: 'Maximum response amplitude at resonance' }
       ]),
       onOpenConcept: () => this.modal.openConcept('MECHANICAL RESONANCE', {
-        what: 'Resonance is the dramatic amplification of oscillatory amplitude when a periodic driving force matches the system natural frequency.',
-        how: 'Energy from the external driver is transferred to the oscillator with maximum efficiency because the driving force is in phase with velocity.',
-        keyIdea: 'Excessive resonance can cause structural failure (e.g. bridges and helicopter blades), while controlled resonance is used in radio tuners and musical instruments.'
+        what: 'Resonance occurs when an oscillating system is driven at a frequency equal or very close to its natural frequency.',
+        how: 'Energy transfer from driver to oscillator reaches maximum efficiency. Light damping yields an extremely sharp, high-amplitude peak.',
+        keyIdea: 'Uncontrolled resonance can cause structural failure in bridges, buildings, and mechanical systems (e.g. Tacoma Narrows Bridge collapse).'
       }),
-      onOpenProblem: () => this.modal.openProblem('SHM_TIME_PERIOD'),
+      onOpenProblem: () => this.modal.openProblem('RESONANCE_PEAK'),
       onBack: () => {
         import('./mechanicsMenuScene.js').then(m => this.sceneManager.changeScene(new m.MechanicsMenuScene()));
       }
     });
 
-    this.dataPanel = new MechanicsDataPanel({ title: 'RESONANCE METRICS' });
+    this.dataPanel = new MechanicsDataPanel({ title: 'RESONANCE DATA' });
     this.modal = new MechanicsModalOverlay();
     this.graph = new GraphRenderer({
-      title: 'Amplitude vs Driving Frequency (Resonance Curve)',
+      title: 'Resonance Response Curve A(ω) vs Driving Frequency',
       xLabel: 'Driving Frequency ω',
       xUnit: 'rad/s',
-      yLabel: 'Steady-State Amplitude',
+      yLabel: 'Steady Amplitude A',
       yUnit: 'm'
     });
 
@@ -57,75 +58,53 @@ export class ResonanceScene {
   }
 
   init() {
+    this.physics.start();
     this.rebuildUI();
   }
 
   rebuildUI() {
     const { width, height } = this.canvasEngine.getBounds();
-    this.controlBar.setBounds(20, 12, width - 40);
+    const layout = LayoutEngine.calculateExperimentLayout(width, height);
 
-    const sidebarW = Math.max(260, Math.min(320, width * 0.28));
-    const sidebarX = width - sidebarW - 20;
-    const contentY = 64;
-    const contentH = height - contentY - 20;
+    this.controlBar.setBounds(layout.toolbarRect.x, layout.toolbarRect.y, layout.toolbarRect.width);
 
     this.sliders = [];
-    let sY = contentY + 20;
-    const sW = sidebarW - 40;
+    let sY = layout.controlRect.y + 16;
+    const sW = layout.controlRect.width - 24;
 
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
-      min: 2.0,
-      max: 20.0,
-      value: this.physics.drivingOmega,
-      step: 0.2,
+      min: 1.0,
+      max: 15.0,
+      value: this.physics.drivingOmega || 6.32,
+      step: 0.1,
       label: 'DRIVING FREQ (ω)',
       unit: ' rad/s',
-      accentColor: '#EF4444',
+      accentColor: Colors.purple,
       callback: (val) => this.physics.setParameters(this.physics.mass, this.physics.springConstant, this.physics.damping, this.physics.f0, val)
     }));
 
-    sY += 55;
+    sY += 44;
     this.sliders.push(new Slider({
-      x: sidebarX + 20,
+      x: layout.controlRect.x + 12,
       y: sY,
       width: sW,
       min: 0.05,
       max: 2.0,
-      value: this.physics.damping,
+      value: this.physics.damping || 0.4,
       step: 0.05,
-      label: 'DAMPING COEFF (c)',
+      label: 'DAMPING (c)',
       unit: ' N·s/m',
       accentColor: Colors.yellow,
       callback: (val) => this.physics.setParameters(this.physics.mass, this.physics.springConstant, val, this.physics.f0, this.physics.drivingOmega)
     }));
 
-    sY += 55;
-    this.sliders.push(new Slider({
-      x: sidebarX + 20,
-      y: sY,
-      width: sW,
-      min: 20,
-      max: 200,
-      value: this.physics.springConstant,
-      step: 10,
-      label: 'SPRING CONSTANT (k)',
-      unit: ' N/m',
-      accentColor: Colors.cyan,
-      callback: (val) => this.physics.setParameters(this.physics.mass, val, this.physics.damping, this.physics.f0, this.physics.drivingOmega)
-    }));
-
-    this.sidebarRect = { x: sidebarX, y: contentY, w: sidebarW, h: contentH };
-    this.dataPanel.setRect(sidebarX, contentY + 200, sidebarW, contentH - 200);
-
-    const mainW = sidebarX - 40;
-    const simH = Math.floor(contentH * 0.35);
-    const graphH = contentH - simH - 15;
-
-    this.simRect = { x: 20, y: contentY, w: mainW, h: simH };
-    this.graph.setRect(20, contentY + simH + 15, mainW, graphH);
+    this.simRect = layout.simRect;
+    this.controlRect = layout.controlRect;
+    this.dataPanel.setRect(layout.dataRect.x, layout.dataRect.y, layout.dataRect.width, layout.dataRect.height);
+    this.graph.setRect(layout.graphRect.x, layout.graphRect.y, layout.graphRect.width, layout.graphRect.height);
   }
 
   handleInput(inputManager) {
@@ -145,118 +124,61 @@ export class ResonanceScene {
     this.physics.update(effectiveDt);
     this.controlBar.setRunning(this.physics.isRunning);
 
-    const qFactor = (this.physics.mass * this.physics.naturalOmega) / this.physics.damping;
+    if (this.modal.isOpen) {
+      this.modal.update(dt, this.inputManager);
+      return;
+    }
 
-    this.dataPanel.setMetrics([
-      { label: 'Natural Freq (ω₀)', value: `${this.physics.naturalOmega.toFixed(2)} rad/s` },
-      { label: 'Driving Freq (ω)', value: `${this.physics.drivingOmega.toFixed(2)} rad/s` },
-      { label: 'Freq Ratio (ω/ω₀)', value: `${(this.physics.drivingOmega / this.physics.naturalOmega).toFixed(3)}` },
-      { label: 'Current Amp (A)', value: `${this.physics.steadyStateAmplitude.toFixed(2)} m` },
-      { label: 'Quality Factor (Q)', value: `${qFactor.toFixed(1)}` },
-      { label: 'State', value: this.physics.isAtResonance ? '🚨 RESONANCE PEAK 🚨' : 'OFF-RESONANCE' }
+    this.controlBar.update(dt, this.inputManager);
+    for (const s of this.sliders) s.update(dt, this.inputManager);
+
+    const w0 = this.physics.naturalOmega || 6.32;
+    const qFactor = (this.physics.mass * w0) / (this.physics.damping || 0.4);
+
+    this.dataPanel.setItems([
+      { label: 'Natural Freq (ω₀)', value: w0.toFixed(2), unit: 'rad/s', color: Colors.cyan },
+      { label: 'Driving Freq (ω)', value: (this.physics.drivingOmega || 0).toFixed(2), unit: 'rad/s', color: Colors.purple },
+      { label: 'Quality Factor Q', value: qFactor.toFixed(1), unit: '', color: Colors.green },
+      { label: 'Steady State Amp', value: (this.physics.steadyStateAmplitude || 0).toFixed(2), unit: 'm', color: Colors.yellow },
+      { label: 'Resonance Peak', value: this.physics.isAtResonance ? 'ACTIVE RESONANCE!' : 'OFF-PEAK', color: this.physics.isAtResonance ? '#EF4444' : Colors.textMuted }
     ]);
 
-    // Compute full resonance curve
-    const curvePoints = this.physics.getResonanceCurvePoints();
-    const dataset = curvePoints.map(pt => ({ x: pt.omega, y: pt.amp }));
+    const curvePts = [];
+    for (let w = 1.0; w <= 15.0; w += 0.2) {
+      const amp = (this.physics.f0 / this.physics.mass) / Math.sqrt(Math.pow(w0 * w0 - w * w, 2) + Math.pow((this.physics.damping / this.physics.mass) * w, 2));
+      curvePts.push({ x: w, y: amp });
+    }
 
-    this.graph.setDatasets([
-      { label: 'Theoretical Response A(ω)', data: dataset, color: '#A855F7', width: 2.5 }
-    ]);
-    this.graph.setMarker(this.physics.drivingOmega, this.physics.steadyStateAmplitude, '#EF4444');
-    this.graph.setLimits(0, this.physics.naturalOmega * 2.2, 0, Math.max(...dataset.map(d => d.y)) * 1.15);
+    this.graph.clearDatasets();
+    this.graph.addDataset({ label: 'Resonance Curve A(ω)', color: Colors.cyan, points: curvePts, lineWidth: 2 });
   }
 
   render(ctx) {
-    Renderer.drawRect(ctx, 0, 0, ctx.canvas.width, ctx.canvas.height, { fill: Colors.bgDark });
+    const { width, height } = this.canvasEngine.getBounds();
+
+    Renderer.drawRect(ctx, 0, 0, width, height, { fill: Colors.background });
+    Renderer.drawGrid(ctx, width, height, 40);
 
     this.controlBar.render(ctx);
 
-    // Sidebar
-    Renderer.drawCard(ctx, this.sidebarRect.x, this.sidebarRect.y, this.sidebarRect.w, this.sidebarRect.h, {
-      title: 'PARAMETERS',
-      accentColor: '#EF4444'
-    });
-
-    for (const slider of this.sliders) {
-      slider.render(ctx);
+    if (this.controlRect) {
+      Renderer.drawPanel(ctx, this.controlRect.x, this.controlRect.y, this.controlRect.width, this.controlRect.height, {
+        fill: Colors.panel,
+        stroke: Colors.panelBorder
+      });
+      for (const s of this.sliders) s.render(ctx);
     }
+
     this.dataPanel.render(ctx);
 
-    // Simulation Viewport
-    Renderer.drawCard(ctx, this.simRect.x, this.simRect.y, this.simRect.w, this.simRect.h, {
-      title: 'DRIVEN HARMONIC SYSTEM VISUALIZER',
-      accentColor: this.physics.isAtResonance ? '#EF4444' : Colors.cyan
-    });
+    if (this.simRect) {
+      Renderer.drawPanel(ctx, this.simRect.x, this.simRect.y, this.simRect.width, this.simRect.height, {
+        fill: '#090E1A',
+        stroke: Colors.panelBorder
+      });
+    }
 
-    this.renderVisualizer(ctx);
-
-    // Graph
     this.graph.render(ctx);
-
-    // Modal
-    this.modal.render(ctx);
-  }
-
-  renderVisualizer(ctx) {
-    const cx = this.simRect.x + this.simRect.w * 0.5;
-    const cy = this.simRect.y + this.simRect.h * 0.55;
-
-    // Center equilibrium
-    Renderer.drawLine(ctx, cx, cy - 45, cx, cy + 45, { color: '#475569', width: 1, dash: [4, 4] });
-
-    const scale = 14;
-    const blockX = cx + this.physics.pos * scale;
-    const blockW = 55;
-    const blockH = 45;
-
-    // Wall
-    const wallX = this.simRect.x + 35;
-    Renderer.drawRect(ctx, wallX - 8, cy - 40, 8, 80, { fill: '#334155' });
-
-    // Draw Spring
-    const numCoils = 14;
-    const springLen = blockX - blockW / 2 - wallX;
-    ctx.beginPath();
-    ctx.strokeStyle = Colors.yellow;
-    ctx.lineWidth = 2.5;
-    ctx.moveTo(wallX, cy);
-    for (let i = 0; i <= numCoils; i++) {
-      const x = wallX + (springLen / numCoils) * i;
-      const y = cy + (i % 2 === 0 ? -12 : 12);
-      ctx.lineTo(x, y);
-    }
-    ctx.lineTo(blockX - blockW / 2, cy);
-    ctx.stroke();
-
-    // Draw Block
-    const blockColor = this.physics.isAtResonance ? '#EF4444' : '#0284C7';
-    Renderer.drawRect(ctx, blockX - blockW / 2, cy - blockH / 2, blockW, blockH, {
-      fill: blockColor,
-      stroke: this.physics.isAtResonance ? '#FCA5A5' : Colors.cyan,
-      width: 2,
-      radius: 4
-    });
-    Renderer.drawText(ctx, `${this.physics.mass} kg`, blockX, cy + 4, {
-      color: '#FFFFFF',
-      size: 11,
-      weight: 'bold',
-      align: 'center'
-    });
-
-    if (this.physics.isAtResonance) {
-      Renderer.drawRect(ctx, cx - 120, this.simRect.y + 12, 240, 24, {
-        fill: 'rgba(239, 68, 68, 0.25)',
-        stroke: '#EF4444',
-        width: 1.5,
-        radius: 4
-      });
-      Renderer.drawText(ctx, '⚡ MAXIMUM RESONANCE AMPLITUDE ⚡', cx, this.simRect.y + 28, {
-        color: '#FCA5A5',
-        size: 11,
-        weight: 'bold',
-        align: 'center'
-      });
-    }
+    this.modal.render(ctx, width, height);
   }
 }
